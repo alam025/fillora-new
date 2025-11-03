@@ -1,21 +1,48 @@
 // Fillora Chrome Extension - Background Script
 console.log('🚀 [FILLORA] Background script loading...');
 
-// Import configuration from config.js
-// config.js must be loaded before this script in manifest.json
-const SUPABASE_URL = window.FILLORA_CONFIG?.SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = window.FILLORA_CONFIG?.SUPABASE_ANON_KEY || '';
-const OPENAI_API_KEY = window.FILLORA_CONFIG?.OPENAI_API_KEY_BACKGROUND || '';
-const SESSION_DURATION = window.FILLORA_CONFIG?.SESSION_DURATION || (30 * 24 * 60 * 60 * 1000);
-const CACHE_DURATION = window.FILLORA_CONFIG?.CACHE_DURATION || (10 * 60 * 1000);
+// For service workers, we'll store config in chrome.storage and load it
+let SUPABASE_URL = '';
+let SUPABASE_ANON_KEY = '';
+let OPENAI_API_KEY = '';
+let SESSION_DURATION = 30 * 24 * 60 * 60 * 1000;
+let CACHE_DURATION = 10 * 60 * 1000;
 
-// Verify configuration loaded
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !OPENAI_API_KEY) {
-    console.error('❌ [FILLORA] Configuration not loaded! Make sure config.js is loaded first.');
-    console.error('Check manifest.json: config.js must be in web_accessible_resources');
-} else {
-    console.log('✅ [FILLORA] Configuration loaded successfully');
+// Load configuration from chrome.storage
+async function loadConfig() {
+  try {
+    const result = await chrome.storage.local.get('fillora_config');
+    if (result.fillora_config) {
+      const config = result.fillora_config;
+      SUPABASE_URL = config.SUPABASE_URL || '';
+      SUPABASE_ANON_KEY = config.SUPABASE_ANON_KEY || '';
+      OPENAI_API_KEY = config.OPENAI_API_KEY_BACKGROUND || '';
+      SESSION_DURATION = config.SESSION_DURATION || SESSION_DURATION;
+      CACHE_DURATION = config.CACHE_DURATION || CACHE_DURATION;
+      console.log('✅ [FILLORA] Configuration loaded from storage');
+    } else {
+      console.warn('⚠️ [FILLORA] No config found, will use defaults or fail gracefully');
+    }
+  } catch (error) {
+    console.error('❌ [FILLORA] Failed to load config:', error);
+  }
 }
+
+// Initialize configuration on install/startup
+chrome.runtime.onInstalled.addListener(async () => {
+  console.log('🔄 Installed/Updated');
+  await loadConfig();
+  await loadStoredAuth();
+});
+
+chrome.runtime.onStartup.addListener(async () => {
+  console.log('🔄 Starting...');
+  await loadConfig();
+  await loadStoredAuth();
+});
+
+// Load config immediately
+loadConfig();
 
 let extensionState = {
   isAuthenticated: false,
@@ -27,16 +54,6 @@ let extensionState = {
   lastDatabaseData: null,
   lastDatabaseFetchTime: null
 };
-
-chrome.runtime.onStartup.addListener(async () => {
-  console.log('🔄 Starting...');
-  await loadStoredAuth();
-});
-
-chrome.runtime.onInstalled.addListener(async () => {
-  console.log('🔄 Installed/Updated');
-  await loadStoredAuth();
-});
 
 async function loadStoredAuth() {
   try {
@@ -85,6 +102,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 async function handleMessage(request, sender, sendResponse) {
+  // Ensure config is loaded
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    await loadConfig();
+  }
+  
   try {
     switch (request.action) {
       case 'GET_AUTH_STATUS':
