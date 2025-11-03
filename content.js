@@ -1,24 +1,13 @@
-// Fillora Chrome Extension - PRODUCTION-GRADE LINKEDIN AUTOMATION
-// Built for reliability, scalability, and user trust
-// Version: 2.0 - Enterprise Edition
-
-console.log('🚀 [FILLORA PRO] Initializing enterprise-grade automation system...');
+// Fillora Chrome Extension - ULTIMATE LINKEDIN AUTOMATION
+// Version: 5.0 - FAST + RELIABLE + COMPREHENSIVE
+console.log('🚀 [FILLORA v5.0] Initializing ULTIMATE LinkedIn automation...');
 
 if (typeof window.filloraInitialized === 'undefined') {
     window.filloraInitialized = true;
     
-    // Import API key from config.js (loaded via manifest.json)
+    // ==================== CONFIGURATION ====================
     const OPENAI_API_KEY = window.FILLORA_CONFIG?.OPENAI_API_KEY_CONTENT || '';
     
-    // Verify configuration loaded
-    if (!OPENAI_API_KEY) {
-        console.error('❌ [FILLORA CONTENT] OpenAI API key not loaded from config.js!');
-        console.error('Check manifest.json: config.js must be loaded before content.js');
-    } else {
-        console.log('✅ [FILLORA CONTENT] OpenAI API key loaded from config.js');
-    }
-    
-    // ==================== ENTERPRISE STATE MANAGEMENT ====================
     const state = {
         isActive: false,
         isProcessing: false,
@@ -31,130 +20,51 @@ if (typeof window.filloraInitialized === 'undefined') {
             applicationsAttempted: 0,
             applicationsSkipped: 0,
             totalAttempts: 0,
-            successRate: 0,
-            errors: [],
-            startTime: null,
-            endTime: null
+            errors: []
         },
         config: {
-            MAX_JOBS: window.FILLORA_CONFIG?.MAX_JOBS || 5,
-            MAX_RETRIES_PER_JOB: window.FILLORA_CONFIG?.MAX_ATTEMPTS_PER_JOB || 3,
-            MAX_TOTAL_ATTEMPTS: 25,
-            SUBMISSION_TIMEOUT: window.FILLORA_CONFIG?.SUBMISSION_TIMEOUT || 120000,
-            MAX_CONSECUTIVE_FAILURES: 7,
-            DELAYS: window.FILLORA_CONFIG?.DELAYS || {
-                AFTER_JOB_CLICK: 2500,
-                AFTER_EASY_APPLY: 2500,
-                AFTER_FIELD_FILL: 150,
-                AFTER_NEXT: 2000,
-                AFTER_SUBMIT: 5000,
-                BETWEEN_JOBS: 2500,
-                VERIFICATION: 2500,
-                ERROR_RECOVERY: 1500
+            MAX_JOBS: 50, // Increased limit
+            MAX_ATTEMPTS: 200,
+            JOB_TIMEOUT: 55000, // 55 seconds per job
+            MAX_RETRIES_PER_JOB: 2,
+            DELAYS: {
+                AFTER_JOB_CLICK: 800,
+                AFTER_EASY_APPLY: 1200,
+                AFTER_FIELD_FILL: 50, // Reduced for speed
+                AFTER_NEXT: 800,
+                AFTER_SUBMIT: 2000,
+                BETWEEN_JOBS: 1000,
+                VERIFICATION: 1500,
+                RETRY_DELAY: 1000
             }
-        }
+        },
+        fieldCache: new Map() // Cache field values for speed
     };
 
-    // ==================== ENTERPRISE LOGGING SYSTEM ====================
+    // ==================== ENHANCED LOGGER ====================
     const Logger = {
-        log: (level, category, message, data = {}) => {
-            const timestamp = new Date().toISOString();
-            const logEntry = {
-                timestamp,
-                level,
-                category,
-                message,
-                data,
-                jobId: state.currentJobId
-            };
-            
+        log: (level, category, message) => {
             const emoji = {
                 'INFO': 'ℹ️',
                 'SUCCESS': '✅',
                 'WARNING': '⚠️',
                 'ERROR': '❌',
-                'DEBUG': '🔍'
+                'SPEED': '⚡'
             }[level] || '📝';
-            
-            console.log(`${emoji} [${level}] [${category}] ${message}`, data);
-            
-            // Store critical errors
-            if (level === 'ERROR') {
-                state.stats.errors.push(logEntry);
-            }
-            
-            return logEntry;
+            console.log(`${emoji} [${level}] [${category}] ${message}`);
         },
-        
-        info: (category, message, data) => Logger.log('INFO', category, message, data),
-        success: (category, message, data) => Logger.log('SUCCESS', category, message, data),
-        warn: (category, message, data) => Logger.log('WARNING', category, message, data),
-        error: (category, message, data) => Logger.log('ERROR', category, message, data),
-        debug: (category, message, data) => Logger.log('DEBUG', category, message, data)
-    };
-
-    // ==================== ENTERPRISE ERROR HANDLER ====================
-    class FilloraError extends Error {
-        constructor(message, code, recoverable = true, context = {}) {
-            super(message);
-            this.name = 'FilloraError';
-            this.code = code;
-            this.recoverable = recoverable;
-            this.context = context;
-            this.timestamp = Date.now();
-        }
-    }
-
-    const ErrorHandler = {
-        handle: async (error, context = {}) => {
-            Logger.error('ERROR_HANDLER', error.message, {
-                code: error.code,
-                recoverable: error.recoverable,
-                context: error.context,
-                stack: error.stack
-            });
-            
-            // Attempt recovery based on error type
-            if (error.recoverable) {
-                return await ErrorHandler.attemptRecovery(error, context);
-            }
-            
-            return false;
-        },
-        
-        attemptRecovery: async (error, context) => {
-            Logger.info('ERROR_RECOVERY', `Attempting recovery for: ${error.code}`);
-            
-            try {
-                // Close any stuck modals
-                await closeAllModals();
-                await delay(state.config.DELAYS.ERROR_RECOVERY);
-                
-                // Clear any stuck states
-                document.querySelectorAll('.fillora-highlight').forEach(el => {
-                    el.classList.remove('fillora-highlight');
-                });
-                
-                return true;
-            } catch (recoveryError) {
-                Logger.error('ERROR_RECOVERY', 'Recovery failed', { error: recoveryError.message });
-                return false;
-            }
-        }
+        info: (cat, msg) => Logger.log('INFO', cat, msg),
+        success: (cat, msg) => Logger.log('SUCCESS', cat, msg),
+        warn: (cat, msg) => Logger.log('WARNING', cat, msg),
+        error: (cat, msg) => Logger.log('ERROR', cat, msg),
+        speed: (cat, msg) => Logger.log('SPEED', cat, msg)
     };
 
     // ==================== INITIALIZATION ====================
     function initialize() {
         state.isActive = true;
-        setupMessageListener();
-        setupGlobalErrorHandlers();
-        Logger.success('INIT', 'Enterprise automation system initialized');
-    }
-
-    function setupMessageListener() {
+        
         chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-            Logger.info('MESSAGE', `Received: ${request.action}`);
-            
             (async () => {
                 try {
                     if (request.action === 'START_LINKEDIN_AUTOMATION') {
@@ -163,44 +73,26 @@ if (typeof window.filloraInitialized === 'undefined') {
                     } else if (request.action === 'PERFORM_AUTOFILL') {
                         const result = await performAutoFill(request.userData);
                         sendResponse(result);
-                    } else {
-                        sendResponse({ success: false, error: 'Unknown action' });
                     }
                 } catch (error) {
-                    const handled = await ErrorHandler.handle(error, { action: request.action });
-                    sendResponse({ success: false, error: error.message, handled });
+                    Logger.error('MESSAGE', error.message);
+                    sendResponse({ success: false, error: error.message });
                 }
             })();
-            
             return true;
         });
-    }
-
-    function setupGlobalErrorHandlers() {
-        window.addEventListener('error', (event) => {
-            Logger.error('GLOBAL_ERROR', 'Uncaught error', {
-                message: event.message,
-                filename: event.filename,
-                lineno: event.lineno
-            });
-        });
         
-        window.addEventListener('unhandledrejection', (event) => {
-            Logger.error('UNHANDLED_REJECTION', 'Unhandled promise rejection', {
-                reason: event.reason
-            });
-        });
+        Logger.success('INIT', 'Fillora ULTIMATE automation ready');
     }
 
-    // ==================== MAIN AUTOMATION ORCHESTRATOR ====================
+    // ==================== MAIN AUTOMATION ENTRY ====================
     async function startLinkedInAutomation(userData) {
-        Logger.info('AUTOMATION', '🚀 Starting production-grade LinkedIn automation');
+        Logger.info('AUTOMATION', '🚀 Starting ULTIMATE LinkedIn Easy Apply automation');
         
         if (state.isProcessing) {
-            throw new FilloraError('Automation already in progress', 'ALREADY_RUNNING', false);
+            throw new Error('Automation already in progress');
         }
         
-        // Reset state
         state.isProcessing = true;
         state.userData = userData;
         state.stats = {
@@ -208,160 +100,176 @@ if (typeof window.filloraInitialized === 'undefined') {
             applicationsAttempted: 0,
             applicationsSkipped: 0,
             totalAttempts: 0,
-            successRate: 0,
-            errors: [],
-            startTime: Date.now(),
-            endTime: null
+            errors: []
         };
         state.processedJobs.clear();
         state.failedJobs.clear();
+        state.fieldCache.clear();
+        
+        const startTime = Date.now();
         
         try {
-            // Step 1: Verify we're on LinkedIn with Easy Apply filter
             await ensureCorrectPage();
-            
-            // Step 2: Main processing loop
             const result = await processJobsMainLoop();
             
-            // Step 3: Calculate final statistics
-            state.stats.endTime = Date.now();
-            state.stats.successRate = state.stats.totalAttempts > 0 
-                ? Math.round((state.stats.applicationsSubmitted / state.stats.totalAttempts) * 100) 
-                : 0;
+            const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+            const timePerJob = (totalTime / Math.max(1, state.stats.applicationsSubmitted)).toFixed(1);
             
-            const duration = ((state.stats.endTime - state.stats.startTime) / 1000).toFixed(1);
-            
-            Logger.success('AUTOMATION', `Completed in ${duration}s`, {
-                submitted: state.stats.applicationsSubmitted,
-                attempted: state.stats.applicationsAttempted,
-                skipped: state.stats.applicationsSkipped,
-                successRate: `${state.stats.successRate}%`
-            });
+            Logger.success('AUTOMATION', `✅ COMPLETED! Submitted: ${state.stats.applicationsSubmitted} jobs`);
+            Logger.speed('AUTOMATION', `⏱️ Total: ${totalTime}s | Average: ${timePerJob}s per job`);
             
             return {
                 success: true,
                 applicationsSubmitted: state.stats.applicationsSubmitted,
                 applicationsAttempted: state.stats.applicationsAttempted,
                 applicationsSkipped: state.stats.applicationsSkipped,
-                totalAttempts: state.stats.totalAttempts,
-                successRate: state.stats.successRate,
-                duration: parseFloat(duration),
-                errors: state.stats.errors.length
+                totalTime: totalTime,
+                averageTimePerJob: timePerJob
             };
             
-        } catch (error) {
-            Logger.error('AUTOMATION', 'Fatal error in automation', { error: error.message });
-            throw error;
         } finally {
             state.isProcessing = false;
             await closeAllModals();
         }
     }
 
+    // ==================== ENHANCED PAGE NAVIGATION ====================
     async function ensureCorrectPage() {
-        Logger.info('NAVIGATION', 'Verifying LinkedIn jobs page with Easy Apply filter');
-        
         const currentUrl = window.location.href;
-        const isOnLinkedIn = currentUrl.includes('linkedin.com/jobs');
-        const hasEasyApplyFilter = currentUrl.includes('f_AL=true');
         
-        if (!isOnLinkedIn || !hasEasyApplyFilter) {
-            Logger.warn('NAVIGATION', 'Navigating to correct page');
-            showNotification('⚡ Opening LinkedIn with Easy Apply filter...', 'info');
+        // Ensure we're on jobs page with Easy Apply filter
+        if (!currentUrl.includes('linkedin.com/jobs') || !currentUrl.includes('f_AL=true')) {
+            Logger.info('NAVIGATION', '🔍 Navigating to LinkedIn Easy Apply jobs...');
             
+            // Direct navigation with Easy Apply filter
             window.location.href = 'https://www.linkedin.com/jobs/search/?f_AL=true&keywords=software%20engineer&location=India&sortBy=DD';
-            await delay(10000);
+            await delay(6000);
         }
         
-        // Verify filter is actually applied in UI
-        await verifyEasyApplyFilterUI();
+        // Wait for jobs to load with enhanced detection
+        await waitForJobsToLoad();
         
-        Logger.success('NAVIGATION', 'On correct page with Easy Apply filter active');
+        Logger.success('NAVIGATION', '✅ On LinkedIn Easy Apply jobs page');
     }
-
-    async function verifyEasyApplyFilterUI() {
-        // Check if Easy Apply filter button is active/pressed
-        const filterButtons = document.querySelectorAll('button[aria-label*="Easy Apply"], button[aria-label*="easy apply"]');
+    
+    async function waitForJobsToLoad() {
+        Logger.info('LOADING', 'Waiting for jobs to load...');
         
-        for (const button of filterButtons) {
-            if (isVisible(button)) {
-                const isActive = button.getAttribute('aria-pressed') === 'true' || 
-                               button.classList.contains('selected') ||
-                               button.classList.contains('active');
+        let attempts = 0;
+        const maxAttempts = 25;
+        
+        while (attempts < maxAttempts) {
+            const jobCards = getJobCards();
+            
+            if (jobCards.length > 0) {
+                const easyApplyJobs = Array.from(jobCards).filter(card => 
+                    card.textContent.toLowerCase().includes('easy apply')
+                ).length;
                 
-                if (!isActive) {
-                    Logger.info('FILTER', 'Activating Easy Apply filter button');
-                    button.click();
-                    await delay(3000);
-                }
-                
-                Logger.success('FILTER', 'Easy Apply filter verified active');
+                Logger.success('LOADING', `✅ Found ${jobCards.length} jobs (${easyApplyJobs} Easy Apply)`);
                 return true;
             }
+            
+            // Scroll to trigger loading if no jobs found
+            if (attempts % 5 === 0) {
+                window.scrollBy(0, 500);
+            }
+            
+            await delay(500);
+            attempts++;
         }
         
-        Logger.warn('FILTER', 'Could not find Easy Apply filter button, but URL filter is active');
-        return true;
+        Logger.warn('LOADING', 'Jobs took longer than expected to load');
+        return false;
     }
 
-    // ==================== MAIN PROCESSING LOOP ====================
+    function getJobCards() {
+        return document.querySelectorAll([
+            '.scaffold-layout__list-item',
+            '.jobs-search-results__list-item',
+            '.job-card-container',
+            '[data-job-id]',
+            '.job-card-list__entity-lockup'
+        ].join(','));
+    }
+
+    // ==================== OPTIMIZED JOB PROCESSING LOOP ====================
     async function processJobsMainLoop() {
-        Logger.info('MAIN_LOOP', `Starting main processing loop (Target: ${state.config.MAX_JOBS} jobs)`);
+        Logger.info('LOOP', `🎯 Target: ${state.config.MAX_JOBS} successful submissions`);
         
         let consecutiveFailures = 0;
+        let lastJobCount = 0;
+        let noNewJobsCount = 0;
         
-        while (state.stats.applicationsSubmitted < state.config.MAX_JOBS) {
+        while (state.stats.applicationsSubmitted < state.config.MAX_JOBS && 
+               state.stats.totalAttempts < state.config.MAX_ATTEMPTS) {
+            
             state.stats.totalAttempts++;
             
-            // Safety checks
-            if (state.stats.totalAttempts > state.config.MAX_TOTAL_ATTEMPTS) {
-                Logger.warn('MAIN_LOOP', 'Maximum total attempts reached');
-                break;
-            }
+            console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+            console.log(`📊 ATTEMPT ${state.stats.totalAttempts} | ✅ Submitted: ${state.stats.applicationsSubmitted}/${state.config.MAX_JOBS}`);
+            console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
             
-            if (consecutiveFailures >= state.config.MAX_CONSECUTIVE_FAILURES) {
-                Logger.warn('MAIN_LOOP', 'Too many consecutive failures - might be out of jobs');
-                await scrollToLoadMoreJobs();
-                consecutiveFailures = 0;
-                await delay(3000);
+            // Check if we're stuck with no new jobs
+            const currentJobCount = getJobCards().length;
+            if (currentJobCount === lastJobCount) {
+                noNewJobsCount++;
+                if (noNewJobsCount >= 3) {
+                    Logger.warn('LOOP', 'No new jobs loading - scrolling for more');
+                    await scrollToLoadMoreJobs();
+                    noNewJobsCount = 0;
+                }
+            } else {
+                noNewJobsCount = 0;
             }
-            
-            logProgress();
+            lastJobCount = currentJobCount;
             
             try {
+                const jobStartTime = Date.now();
                 const jobResult = await processNextJob();
+                const jobTime = ((Date.now() - jobStartTime) / 1000).toFixed(1);
                 
                 if (jobResult.submitted) {
                     state.stats.applicationsSubmitted++;
                     state.stats.applicationsAttempted++;
                     consecutiveFailures = 0;
                     
-                    showNotification(`✅ Job ${state.stats.applicationsSubmitted}/${state.config.MAX_JOBS} submitted!`, 'success');
-                    Logger.success('JOB_COMPLETE', `Job #${state.stats.applicationsSubmitted} submitted successfully`);
+                    Logger.success('LOOP', `🎉 Progress: ${state.stats.applicationsSubmitted}/${state.config.MAX_JOBS}`);
+                    Logger.speed('LOOP', `⏱️ Job completed in ${jobTime}s`);
                     
-                } else if (jobResult.skipped) {
-                    state.stats.applicationsSkipped++;
-                    consecutiveFailures++;
-                    Logger.info('JOB_COMPLETE', `Job skipped: ${jobResult.reason}`);
-                    
+                    showNotification(`✅ Job ${state.stats.applicationsSubmitted}/${state.config.MAX_JOBS} SUBMITTED in ${jobTime}s!`, 'success');
                 } else {
                     state.stats.applicationsAttempted++;
                     consecutiveFailures++;
-                    Logger.warn('JOB_COMPLETE', `Job failed: ${jobResult.reason}`);
+                    Logger.warn('LOOP', `Job failed - consecutive failures: ${consecutiveFailures}`);
                 }
                 
             } catch (error) {
-                Logger.error('JOB_PROCESSING', 'Error processing job', { error: error.message });
+                Logger.error('LOOP', `Error: ${error.message}`);
+                state.stats.errors.push(error.message);
                 consecutiveFailures++;
-                await ErrorHandler.handle(error, { loop: 'main' });
             }
             
-            // Cleanup between jobs
+            // Reset if too many consecutive failures
+            if (consecutiveFailures >= 5) {
+                Logger.warn('LOOP', 'Multiple consecutive failures - refreshing strategy');
+                await scrollToLoadMoreJobs();
+                consecutiveFailures = 0;
+                await delay(2000);
+            }
+            
             await closeAllModals();
             await delay(state.config.DELAYS.BETWEEN_JOBS);
         }
         
-        Logger.success('MAIN_LOOP', 'Main processing loop completed');
+        // Final summary
+        Logger.success('LOOP', `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        Logger.success('LOOP', `🎉 ULTIMATE AUTOMATION COMPLETED!`);
+        Logger.success('LOOP', `✅ Submitted: ${state.stats.applicationsSubmitted}`);
+        Logger.success('LOOP', `📝 Attempted: ${state.stats.applicationsAttempted}`);
+        Logger.success('LOOP', `⏭️  Skipped: ${state.stats.applicationsSkipped}`);
+        Logger.success('LOOP', `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        
         return {
             submitted: state.stats.applicationsSubmitted,
             attempted: state.stats.applicationsAttempted,
@@ -369,792 +277,636 @@ if (typeof window.filloraInitialized === 'undefined') {
         };
     }
 
-    function logProgress() {
-        console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log(`📊 ATTEMPT ${state.stats.totalAttempts}`);
-        console.log(`✅ Submitted: ${state.stats.applicationsSubmitted}/${state.config.MAX_JOBS}`);
-        console.log(`🎯 Attempted: ${state.stats.applicationsAttempted}`);
-        console.log(`⏭️  Skipped: ${state.stats.applicationsSkipped}`);
-        console.log(`📝 Processed: ${state.processedJobs.size}`);
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-    }
-
-    // ==================== JOB PROCESSING ====================
+    // ==================== ENHANCED SINGLE JOB PROCESSING ====================
     async function processNextJob() {
-        Logger.info('JOB', 'Finding next job to process');
-        
-        let retries = 0;
         const maxRetries = state.config.MAX_RETRIES_PER_JOB;
+        let retryCount = 0;
         
-        while (retries < maxRetries) {
+        while (retryCount < maxRetries) {
             try {
-                // Step 1: Find and select job
-                const job = await findAndSelectNextJob();
+                // Step 1: Find and click on an Easy Apply job
+                const job = await findAndClickEasyApplyJob();
                 if (!job) {
-                    return { submitted: false, skipped: true, reason: 'No jobs found' };
+                    Logger.warn('JOB', 'No Easy Apply jobs found');
+                    await scrollToLoadMoreJobs();
+                    retryCount++;
+                    continue;
                 }
                 
                 state.currentJobId = job.id;
+                Logger.info('JOB', `Selected job: ${job.id.substring(0, 15)}... (Attempt ${retryCount + 1}/${maxRetries})`);
+                
                 await delay(state.config.DELAYS.AFTER_JOB_CLICK);
                 
-                // Step 2: Open Easy Apply modal
-                const modalOpened = await openEasyApplyModal();
-                if (!modalOpened) {
-                    Logger.warn('JOB', 'Failed to open Easy Apply modal');
-                    return { submitted: false, skipped: true, reason: 'No Easy Apply modal' };
+                // Step 2: Click "Easy Apply" button
+                const easyApplyClicked = await clickEasyApplyButton();
+                if (!easyApplyClicked) {
+                    Logger.warn('JOB', 'Easy Apply button not found');
+                    await closeAllModals();
+                    retryCount++;
+                    continue;
                 }
                 
                 await delay(state.config.DELAYS.AFTER_EASY_APPLY);
                 
-                // Step 3: Submit application
-                const submitted = await submitApplication();
+                // Step 3: Submit application with enhanced timeout handling
+                const submitted = await submitApplicationWithRetry();
                 
                 if (submitted) {
-                    Logger.success('JOB', `Job ${state.currentJobId} submitted successfully`);
-                    return { submitted: true, skipped: false, reason: 'Success' };
+                    Logger.success('JOB', `✅ SUBMITTED successfully`);
+                    return { submitted: true, skipped: false };
                 } else {
-                    retries++;
-                    Logger.warn('JOB', `Job submission failed (retry ${retries}/${maxRetries})`);
+                    Logger.warn('JOB', `⚠️ Attempt ${retryCount + 1} failed`);
+                    await closeAllModals();
+                    retryCount++;
                     
-                    if (retries < maxRetries) {
-                        await closeAllModals();
-                        await delay(2000);
-                        continue;
+                    // Remove from processed set to allow retry
+                    if (state.currentJobId) {
+                        state.processedJobs.delete(state.currentJobId);
                     }
+                    
+                    await delay(state.config.DELAYS.RETRY_DELAY);
                 }
                 
             } catch (error) {
-                retries++;
-                Logger.error('JOB', `Error in job processing (retry ${retries}/${maxRetries})`, { error: error.message });
-                
-                if (retries < maxRetries) {
-                    await ErrorHandler.handle(error, { retries });
-                    continue;
-                }
+                Logger.error('JOB', `Error on attempt ${retryCount + 1}: ${error.message}`);
+                await closeAllModals();
+                retryCount++;
+                await delay(state.config.DELAYS.RETRY_DELAY);
             }
         }
         
-        state.failedJobs.add(state.currentJobId);
-        return { submitted: false, skipped: false, reason: 'Max retries exceeded' };
+        // After max retries, mark as failed
+        Logger.error('JOB', `❌ Failed after ${maxRetries} attempts`);
+        if (state.currentJobId) {
+            state.failedJobs.add(state.currentJobId);
+        }
+        
+        return { submitted: false, skipped: false, reason: 'Max retries reached' };
     }
 
-    // ==================== JOB SELECTION ====================
-    async function findAndSelectNextJob() {
-        Logger.info('JOB_SEARCH', 'Searching for unprocessed Easy Apply job');
+    async function submitApplicationWithRetry() {
+        return Promise.race([
+            submitApplicationComplete(),
+            timeout(state.config.JOB_TIMEOUT, false)
+        ]);
+    }
+
+    // ==================== ENHANCED JOB SELECTION ====================
+    async function findAndClickEasyApplyJob() {
+        const jobCards = getJobCards();
         
-        const selectors = [
-            '.scaffold-layout__list-item',
-            '.jobs-search-results__list-item',
-            '.job-card-container',
-            '[data-job-id]'
-        ];
-        
-        for (const selector of selectors) {
-            const cards = Array.from(document.querySelectorAll(selector));
-            Logger.debug('JOB_SEARCH', `Found ${cards.length} cards with selector: ${selector}`);
+        for (const card of jobCards) {
+            if (!isVisible(card)) continue;
             
-            for (const card of cards) {
-                if (!isVisible(card)) continue;
-                
-                const jobId = getJobId(card);
-                if (!jobId) continue;
-                
-                // Skip if already processed or failed
-                if (state.processedJobs.has(jobId) || state.failedJobs.has(jobId)) {
-                    Logger.debug('JOB_SEARCH', `Skipping already processed job: ${jobId.substring(0, 10)}...`);
-                    continue;
-                }
-                
-                // Check for skip indicators
-                const cardText = card.textContent.toLowerCase();
-                if (cardText.includes("we won't show") || 
-                    cardText.includes("you applied") ||
-                    cardText.includes("application sent")) {
-                    Logger.info('JOB_SEARCH', `Skipping already applied job: ${jobId.substring(0, 10)}...`);
-                    state.processedJobs.add(jobId);
-                    continue;
-                }
-                
-                // Must have Easy Apply badge
-                if (!cardText.includes('easy apply')) {
-                    Logger.debug('JOB_SEARCH', `Skipping non-Easy Apply job: ${jobId.substring(0, 10)}...`);
-                    state.processedJobs.add(jobId);
-                    continue;
-                }
-                
-                // Click and verify
-                Logger.info('JOB_SEARCH', `Found potential job: ${jobId.substring(0, 10)}...`);
-                highlightElement(card, '#0A66C2');
-                await scrollIntoView(card);
-                await delay(500);
-                
-                card.click();
-                await delay(2000);
-                
-                // Final verification: Easy Apply button must exist
-                if (findEasyApplyButton()) {
-                    Logger.success('JOB_SEARCH', `Confirmed Easy Apply job: ${jobId.substring(0, 10)}...`);
-                    state.processedJobs.add(jobId);
-                    return { id: jobId, element: card };
-                } else {
-                    Logger.warn('JOB_SEARCH', `Easy Apply button not found for job: ${jobId.substring(0, 10)}...`);
-                    state.processedJobs.add(jobId);
-                    continue;
-                }
+            const jobId = getJobId(card);
+            if (!jobId || state.processedJobs.has(jobId) || state.failedJobs.has(jobId)) {
+                continue;
             }
+            
+            const cardText = card.textContent.toLowerCase();
+            
+            // Skip if already applied
+            if (cardText.includes('you applied') || 
+                cardText.includes('applied on') ||
+                cardText.includes('application sent')) {
+                state.processedJobs.add(jobId);
+                continue;
+            }
+            
+            // Must have "Easy Apply"
+            if (!cardText.includes('easy apply')) {
+                state.processedJobs.add(jobId);
+                continue;
+            }
+            
+            // Click the job card
+            Logger.info('JOB_CLICK', `Clicking Easy Apply job`);
+            highlightElement(card, '#0A66C2');
+            await scrollIntoView(card);
+            card.click();
+            await delay(800);
+            
+            // Verify job details loaded
+            const jobLoaded = await waitForJobDetails();
+            if (!jobLoaded) {
+                Logger.warn('JOB_CLICK', 'Job details not loading - skipping');
+                continue;
+            }
+            
+            state.processedJobs.add(jobId);
+            return { id: jobId, element: card };
         }
         
-        Logger.warn('JOB_SEARCH', 'No unprocessed Easy Apply jobs found');
         return null;
     }
 
-    function getJobId(card) {
-        return card.getAttribute('data-job-id') || 
-               card.getAttribute('data-occludable-job-id') ||
-               card.querySelector('[data-job-id]')?.getAttribute('data-job-id') ||
-               card.id ||
-               `job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    async function waitForJobDetails() {
+        let attempts = 0;
+        while (attempts < 10) {
+            // Check if job details panel is visible and has content
+            const jobPanel = document.querySelector('.jobs-search__job-details--container') ||
+                           document.querySelector('.jobs-details') ||
+                           document.querySelector('[data-job-id]');
+            
+            if (jobPanel && jobPanel.textContent && jobPanel.textContent.length > 100) {
+                return true;
+            }
+            await delay(300);
+            attempts++;
+        }
+        return false;
     }
 
-    function findEasyApplyButton() {
-        const selectors = [
-            'button.jobs-apply-button',
+    // ==================== ENHANCED EASY APPLY CLICK ====================
+    async function clickEasyApplyButton() {
+        await delay(600);
+        
+        const buttonSelectors = [
             'button[aria-label*="Easy Apply"]',
             'button[aria-label*="easy apply"]',
-            '.jobs-apply-button'
+            'button.jobs-apply-button',
+            'button[data-control-name="jobdetails_topcard_inapply"]'
         ];
         
-        for (const selector of selectors) {
-            const button = document.querySelector(selector);
-            if (button && isVisible(button)) {
-                const text = button.textContent.toLowerCase();
+        for (const selector of buttonSelectors) {
+            const buttons = document.querySelectorAll(selector);
+            for (const button of buttons) {
+                if (!isVisible(button) || button.disabled) continue;
+                
+                const text = button.textContent.toLowerCase().trim();
                 const aria = (button.getAttribute('aria-label') || '').toLowerCase();
-                if (text.includes('easy apply') || aria.includes('easy apply')) {
-                    return button;
+                
+                if ((text.includes('easy apply') || aria.includes('easy apply')) &&
+                    !text.includes('applied on') &&
+                    !aria.includes('application sent')) {
+                    
+                    Logger.info('BUTTON', `✅ Clicking "Easy Apply" button`);
+                    highlightElement(button, '#057642');
+                    await delay(200);
+                    button.click();
+                    return true;
                 }
             }
         }
         
-        // Fallback: search all buttons
-        const allButtons = document.querySelectorAll('button');
-        for (const button of allButtons) {
-            if (!isVisible(button)) continue;
-            const combined = (button.textContent + ' ' + (button.getAttribute('aria-label') || '')).toLowerCase();
-            if (combined.includes('easy apply') && !combined.includes('continue') && !combined.includes('already')) {
-                return button;
-            }
-        }
-        
-        return null;
-    }
-
-    async function openEasyApplyModal() {
-        Logger.info('MODAL', 'Opening Easy Apply modal');
-        
-        for (let attempt = 1; attempt <= 3; attempt++) {
-            const button = findEasyApplyButton();
-            
-            if (button && isVisible(button) && !button.disabled) {
-                // Verify it's actually Easy Apply
-                const text = button.textContent.toLowerCase();
-                const aria = (button.getAttribute('aria-label') || '').toLowerCase();
-                
-                if (!text.includes('easy apply') && !aria.includes('easy apply')) {
-                    Logger.warn('MODAL', 'Button is not Easy Apply, skipping');
-                    return false;
-                }
-                
-                highlightElement(button, '#057642');
-                await delay(300);
-                button.click();
-                
-                Logger.success('MODAL', 'Easy Apply button clicked');
-                return true;
-            }
-            
-            if (attempt < 3) {
-                Logger.warn('MODAL', `Button not found (attempt ${attempt}/3), retrying...`);
-                await delay(1000);
-            }
-        }
-        
-        Logger.error('MODAL', 'Failed to open Easy Apply modal after 3 attempts');
         return false;
     }
 
-    // ==================== APPLICATION SUBMISSION ====================
-    async function submitApplication() {
-        Logger.info('SUBMISSION', 'Starting application submission process');
+    // ==================== ULTIMATE APPLICATION SUBMISSION ====================
+    async function submitApplicationComplete() {
+        Logger.info('SUBMIT', '🚀 Starting ULTIMATE application submission');
         
-        const startTime = Date.now();
         let currentStep = 0;
-        const maxSteps = 15;
+        const maxSteps = 15; // Reduced for speed
         
-        while (Date.now() - startTime < state.config.SUBMISSION_TIMEOUT && currentStep < maxSteps) {
+        while (currentStep < maxSteps) {
             currentStep++;
-            Logger.info('SUBMISSION', `Processing step ${currentStep}/${maxSteps}`);
             
             // Check if already submitted
-            if (await checkIfSubmitted()) {
-                Logger.success('SUBMISSION', 'Application confirmed submitted!');
+            if (await isApplicationSubmitted()) {
+                Logger.success('SUBMIT', '✅ Application SUBMITTED successfully!');
                 return true;
             }
             
-            // Fill all visible fields
-            await fillAllFields();
-            await delay(500);
+            // FAST FIELD FILLING - Process all fields in parallel when possible
+            await fillAllFieldsFast();
             
-            // Fix validation errors
-            await fixValidationErrors();
-            await delay(500);
+            // Handle dynamic content
+            await handleDynamicContent();
             
-            // Try to submit
-            if (await tryToSubmit()) {
-                Logger.info('SUBMISSION', 'Submit button clicked, waiting for confirmation...');
-                await delay(state.config.DELAYS.AFTER_SUBMIT);
+            // Check again if submitted
+            if (await isApplicationSubmitted()) {
+                return true;
+            }
+            
+            // Try to progress through application
+            const progressed = await progressApplication();
+            if (!progressed) {
+                // No progression possible - might be done or stuck
+                Logger.warn('SUBMIT', 'No progression possible - checking completion');
+                await delay(800);
                 
-                if (await checkIfSubmitted()) {
-                    Logger.success('SUBMISSION', 'Submission confirmed!');
+                if (await isApplicationSubmitted()) {
                     return true;
                 }
                 
-                // Double-check after extra delay
-                await delay(state.config.DELAYS.VERIFICATION);
-                if (await checkIfSubmitted()) {
-                    Logger.success('SUBMISSION', 'Submission confirmed (delayed)!');
-                    return true;
-                }
-            }
-            
-            // Try to go next
-            if (await tryToGoNext()) {
-                Logger.info('SUBMISSION', 'Moved to next page');
-                await delay(state.config.DELAYS.AFTER_NEXT);
-                continue;
-            }
-            
-            // If stuck, try any action button
-            if (await tryAnyActionButton()) {
-                await delay(2000);
-                if (await checkIfSubmitted()) {
-                    Logger.success('SUBMISSION', 'Submission confirmed (via action button)!');
-                    return true;
-                }
-                continue;
-            }
-            
-            // If we've been here too long, give up
-            if (currentStep >= 10) {
-                Logger.warn('SUBMISSION', 'Too many steps, likely stuck');
+                // If still not submitted and no progression, break
                 break;
             }
-            
-            await delay(1000);
         }
         
-        Logger.error('SUBMISSION', 'Failed to submit application');
+        // Final submission attempt
+        if (await clickFinalSubmit()) {
+            Logger.success('SUBMIT', '✅ Final submission successful!');
+            return true;
+        }
+        
+        Logger.error('SUBMIT', '❌ Max steps reached without submission');
         return false;
     }
 
-    async function fillAllFields() {
-        Logger.info('FORM_FILL', 'Filling all visible form fields');
+    async function fillAllFieldsFast() {
+        const fields = getAllVisibleFormFields();
         
-        const fields = getVisibleFormFields();
-        Logger.debug('FORM_FILL', `Found ${fields.length} fields`);
+        if (fields.length === 0) {
+            return;
+        }
         
-        let filled = 0;
+        Logger.info('FILL', `Fast-filling ${fields.length} fields`);
         
-        for (const field of fields) {
-            try {
-                if (field.value && field.value.trim()) continue;
-                
+        // Process fields in batches for speed
+        const batchSize = 3;
+        for (let i = 0; i < fields.length; i += batchSize) {
+            const batch = fields.slice(i, i + batchSize);
+            await Promise.all(batch.map(field => fillFieldUltraFast(field)));
+            await delay(100); // Small delay between batches
+        }
+        
+        // Handle special fields
+        await handleAllDropdownsFast();
+        await handleCheckboxesFast();
+    }
+
+    async function fillFieldUltraFast(field) {
+        try {
+            // Skip if already filled
+            if (field.value && field.value.trim() && field.value !== 'select') {
+                return;
+            }
+            
+            const fieldKey = getFieldIdentifier(field);
+            let value = state.fieldCache.get(fieldKey);
+            
+            if (!value) {
                 const fieldInfo = analyzeField(field);
-                const value = await getBestFieldValue(fieldInfo);
-                
-                if (value) {
-                    await setFieldValue(field, value, fieldInfo);
-                    filled++;
-                    await delay(state.config.DELAYS.AFTER_FIELD_FILL);
-                }
-            } catch (error) {
-                Logger.warn('FORM_FILL', `Error filling field: ${error.message}`);
+                value = await getBestValueForField(fieldInfo);
+                state.fieldCache.set(fieldKey, value || '');
             }
-        }
-        
-        Logger.success('FORM_FILL', `Filled ${filled}/${fields.length} fields`);
-        
-        // Handle special inputs
-        await handleCheckboxes();
-        await handleRadios();
-        await handleDropdowns();
-    }
-
-    async function tryToSubmit() {
-        const button = findSubmitButton();
-        if (button && isVisible(button) && !button.disabled) {
-            highlightElement(button, '#057642');
-            Logger.info('SUBMIT_BTN', `Clicking submit: "${button.textContent.trim()}"`);
-            await delay(500);
-            button.click();
-            return true;
-        }
-        return false;
-    }
-
-    async function tryToGoNext() {
-        const button = findNextButton();
-        if (button && isVisible(button) && !button.disabled) {
-            highlightElement(button, '#0A66C2');
-            Logger.info('NEXT_BTN', `Clicking next: "${button.textContent.trim()}"`);
-            await delay(500);
-            button.click();
-            return true;
-        }
-        return false;
-    }
-
-    async function tryAnyActionButton() {
-        const buttons = Array.from(document.querySelectorAll('button'));
-        
-        for (const button of buttons) {
-            if (!isVisible(button) || button.disabled) continue;
             
-            const classes = button.className.toLowerCase();
-            const text = button.textContent.toLowerCase().trim();
+            if (!value) return;
             
-            if (classes.includes('primary') && 
-                !text.includes('back') && 
-                !text.includes('cancel') &&
-                !text.includes('close')) {
-                
-                Logger.info('ACTION_BTN', `Clicking action button: "${text}"`);
-                button.click();
-                return true;
-            }
-        }
-        
-        return false;
-    }
-
-    function findSubmitButton() {
-        const allButtons = Array.from(document.querySelectorAll('button'));
-        
-        // Priority 1: Exact "Submit Application"
-        for (const btn of allButtons) {
-            if (!isVisible(btn) || btn.disabled) continue;
-            const text = btn.textContent.toLowerCase().trim();
-            if (text === 'submit application' || text === 'submit') {
-                return btn;
-            }
-        }
-        
-        // Priority 2: Contains "submit" but not "next"
-        for (const btn of allButtons) {
-            if (!isVisible(btn) || btn.disabled) continue;
-            const text = btn.textContent.toLowerCase();
-            if (text.includes('submit') && !text.includes('next')) {
-                return btn;
-            }
-        }
-        
-        return null;
-    }
-
-    function findNextButton() {
-        const allButtons = Array.from(document.querySelectorAll('button'));
-        
-        for (const btn of allButtons) {
-            if (!isVisible(btn) || btn.disabled) continue;
-            const text = btn.textContent.toLowerCase();
-            const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
-            const combined = text + ' ' + aria;
-            
-            if ((combined.includes('next') || combined.includes('continue')) && 
-                !combined.includes('submit') && 
-                !combined.includes('back')) {
-                return btn;
-            }
-        }
-        
-        return null;
-    }
-
-    async function checkIfSubmitted() {
-        // Check for success indicators
-        const successSelectors = [
-            '[data-test-modal-id*="application-submitted"]',
-            '.artdeco-toast-item--success',
-            '.jobs-easy-apply-content__success'
-        ];
-        
-        for (const selector of successSelectors) {
-            if (document.querySelector(selector)) {
-                return true;
-            }
-        }
-        
-        // Check text
-        const bodyText = document.body.textContent.toLowerCase();
-        if (bodyText.includes('application submitted') || 
-            bodyText.includes('application sent') ||
-            bodyText.includes('submitted successfully')) {
-            return true;
-        }
-        
-        // Check if modal closed
-        const modal = document.querySelector('.jobs-easy-apply-modal');
-        if (!modal || !isVisible(modal)) {
-            return true;
-        }
-        
-        return false;
-    }
-
-    async function fixValidationErrors() {
-        const errorElements = document.querySelectorAll('[role="alert"], .error-message');
-        if (errorElements.length === 0) return;
-        
-        Logger.warn('VALIDATION', `Found ${errorElements.length} validation errors, fixing...`);
-        
-        const requiredFields = document.querySelectorAll('[required], [aria-required="true"]');
-        for (const field of requiredFields) {
-            if (!isVisible(field) || field.value) continue;
-            
+            // Ultra-fast filling
             if (field.tagName === 'SELECT') {
-                const options = Array.from(field.options).filter(opt => opt.value && opt.value !== 'select');
-                if (options.length > 0) {
-                    field.value = options[0].value;
+                await selectDropdownOptionFast(field, value);
+            } else if (field.type === 'checkbox') {
+                if (!field.checked) {
+                    field.checked = true;
                     field.dispatchEvent(new Event('change', { bubbles: true }));
                 }
-            } else if (field.type === 'number') {
-                field.value = '1';
-                field.dispatchEvent(new Event('input', { bubbles: true }));
-            } else {
-                field.value = 'Not specified';
-                field.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        }
-    }
-
-    // ==================== FIELD VALUE GENERATION ====================
-    async function getBestFieldValue(fieldInfo) {
-        const { label, type, name, placeholder } = fieldInfo;
-        const searchText = (label + ' ' + name + ' ' + placeholder).toLowerCase();
-        
-        // Try user data first
-        let value = getUserDataValue(searchText, fieldInfo);
-        if (value) return value;
-        
-        // Try AI (only if API key is available)
-        if (OPENAI_API_KEY) {
-            value = await getAIValue(fieldInfo, searchText);
-            if (value) return value;
-        }
-        
-        // Smart defaults
-        return getSmartDefault(searchText, type);
-    }
-
-    function getUserDataValue(searchText, fieldInfo) {
-        if (!state.userData) return null;
-        
-        const user = state.userData;
-        
-        if (searchText.includes('first') && searchText.includes('name')) return user.firstName;
-        if (searchText.includes('last') && searchText.includes('name')) return user.lastName;
-        if (searchText.match(/\bname\b/)) return user.fullName || user.name;
-        if (searchText.includes('email')) return user.email;
-        if (searchText.includes('phone')) return user.phone;
-        if (searchText.includes('city')) return user.city;
-        if (searchText.includes('state')) return user.state;
-        if (searchText.includes('country')) return user.country;
-        if (searchText.includes('company')) return user.currentCompany;
-        if (searchText.includes('title') || searchText.includes('position')) return user.currentTitle;
-        
-        if (searchText.includes('experience') && searchText.includes('year')) {
-            const exp = user.totalExperience || 0;
-            return fieldInfo.type === 'number' ? String(Math.floor(exp)) : String(exp);
-        }
-        
-        if (searchText.includes('ctc') || searchText.includes('salary')) {
-            const exp = user.totalExperience || 2;
-            let ctc;
-            if (user.currentSalary) {
-                ctc = parseFloat(user.currentSalary);
-            } else {
-                if (exp < 1) ctc = 3.5;
-                else if (exp < 2) ctc = 5;
-                else if (exp < 3) ctc = 7;
-                else if (exp < 4) ctc = 9;
-                else if (exp < 5) ctc = 12;
-                else if (exp < 7) ctc = 16;
-                else ctc = 22;
-            }
-            return String(ctc);
-        }
-        
-        if (searchText.includes('notice')) {
-            if (user.noticePeriod) {
-                const match = user.noticePeriod.match(/\d+/);
-                return match ? match[0] : '30';
-            }
-            return '30';
-        }
-        
-        if (searchText.includes('education') || searchText.includes('degree')) return user.education;
-        if (searchText.includes('school') || searchText.includes('university')) return user.institution;
-        if (searchText.includes('skill')) return user.skillsText;
-        if (searchText.includes('linkedin')) return user.linkedin;
-        if (searchText.includes('github')) return user.github;
-        
-        return null;
-    }
-
-    async function getAIValue(fieldInfo, searchText) {
-        if (!OPENAI_API_KEY) {
-            Logger.warn('AI_VALUE', 'OpenAI API key not configured, skipping AI generation');
-            return null;
-        }
-        
-        try {
-            const userContext = state.userData ? `
-Experience: ${state.userData.totalExperience || 0} years
-Role: ${state.userData.currentTitle || 'Not specified'}
-Location: ${state.userData.city || 'India'}
-` : '';
-
-            const prompt = `${userContext}
-Field: "${fieldInfo.label || fieldInfo.name}"
-Type: ${fieldInfo.type}
-
-Provide a SHORT answer for this job application field. 
-For salary: return ONLY number (e.g. "12")
-For notice period: return ONLY days (e.g. "30")
-For Yes/No: return ONLY "Yes" or "No"
-Keep answers under 10 words.`;
-
-            const response = await fetch('https://api.openai.com/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${OPENAI_API_KEY}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    model: 'gpt-4o-mini',
-                    messages: [{ role: 'user', content: prompt }],
-                    max_tokens: 50,
-                    temperature: 0.2
-                })
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                let answer = data.choices[0].message.content.trim();
-                answer = answer.replace(/['"]/g, '').replace(/\.$/, '');
-                
-                if (fieldInfo.type === 'number') {
-                    const numMatch = answer.match(/[\d.]+/);
-                    if (numMatch) answer = numMatch[0];
-                }
-                
-                return answer;
-            }
-        } catch (error) {
-            Logger.warn('AI_VALUE', `AI failed: ${error.message}`);
-        }
-        return null;
-    }
-
-    function getSmartDefault(searchText, type) {
-        if (searchText.includes('ctc') || searchText.includes('salary')) return '10';
-        if (searchText.includes('experience')) return '3';
-        if (searchText.includes('notice')) return '30';
-        if (searchText.includes('relocate')) return 'Yes';
-        if (searchText.includes('authorized')) return 'Yes';
-        if (searchText.includes('sponsor')) return 'No';
-        if (searchText.includes('client') || searchText.includes('delivery')) return 'Yes';
-        
-        if (type === 'email') return 'user@example.com';
-        if (type === 'tel') return '+919876543210';
-        if (type === 'number') return '0';
-        
-        return null;
-    }
-
-    async function setFieldValue(field, value, fieldInfo) {
-        try {
-            field.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            await delay(150);
-            field.focus();
-            await delay(100);
-            
-            if (field.tagName === 'SELECT') {
-                await handleSelectField(field, value);
-            } else if (field.type === 'checkbox') {
-                field.checked = value === 'Yes' || value === 'yes' || value === true;
             } else if (field.type === 'radio') {
-                field.checked = true;
-            } else if (field.type === 'number') {
-                field.value = String(value).replace(/[^\d.]/g, '');
+                if (!field.checked) {
+                    field.checked = true;
+                    field.dispatchEvent(new Event('change', { bubbles: true }));
+                }
             } else {
                 field.value = value;
+                field.dispatchEvent(new Event('input', { bubbles: true }));
             }
             
-            field.dispatchEvent(new Event('input', { bubbles: true }));
-            field.dispatchEvent(new Event('change', { bubbles: true }));
-            field.dispatchEvent(new Event('blur', { bubbles: true }));
-            
-            return true;
         } catch (error) {
-            return false;
+            // Silent fail for speed
         }
     }
 
-    async function handleSelectField(selectField, value) {
-        const options = Array.from(selectField.options).filter(opt => 
+    function getFieldIdentifier(field) {
+        return `${field.type}-${field.name}-${field.id}-${getFieldLabel(field)}`;
+    }
+
+    function analyzeField(field) {
+        const label = getFieldLabel(field).toLowerCase();
+        const placeholder = (field.placeholder || '').toLowerCase();
+        const name = (field.name || '').toLowerCase();
+        const id = (field.id || '').toLowerCase();
+        
+        return {
+            type: field.type || field.tagName.toLowerCase(),
+            label: label,
+            name: name,
+            placeholder: placeholder,
+            id: id,
+            combined: `${label} ${placeholder} ${name} ${id}`
+        };
+    }
+
+    async function getBestValueForField(fieldInfo) {
+        const u = state.userData;
+        if (!u) return getSmartDefault(fieldInfo);
+        
+        const combined = fieldInfo.combined;
+        
+        // Name fields
+        if (combined.includes('first') && combined.includes('name')) return u.firstName;
+        if (combined.includes('last') && combined.includes('name')) return u.lastName;
+        if (combined.match(/\bname\b/) && !combined.includes('company')) {
+            return u.fullName || u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim();
+        }
+        
+        // Contact fields
+        if (combined.includes('email')) return u.email;
+        if (combined.includes('phone') || combined.includes('mobile')) return u.phone;
+        
+        // Location fields
+        if (combined.includes('city')) return u.city;
+        if (combined.includes('state')) return u.state;
+        if (combined.includes('country')) return u.country || 'India';
+        if (combined.includes('zip') || combined.includes('pincode')) return u.pincode;
+        
+        // Work fields
+        if (combined.includes('company') && combined.includes('current')) return u.currentCompany;
+        if (combined.includes('employer')) return u.currentCompany;
+        if (combined.includes('title') || combined.includes('position')) return u.currentTitle;
+        
+        // Experience
+        if ((combined.includes('experience') || combined.includes('years')) && 
+            combined.includes('work')) {
+            return String(Math.floor(u.totalExperience || 2));
+        }
+        
+        // Salary
+        if (combined.includes('salary') || combined.includes('ctc')) {
+            return String(u.currentSalary || calculateExpectedSalary(u.totalExperience || 2));
+        }
+        
+        // Notice period
+        if (combined.includes('notice')) {
+            return u.noticePeriod ? String(u.noticePeriod).replace(/\D/g, '') : '30';
+        }
+        
+        return getSmartDefault(fieldInfo);
+    }
+
+    function getSmartDefault(fieldInfo) {
+        const combined = fieldInfo.combined;
+        
+        if (combined.includes('salary') || combined.includes('ctc')) return '8';
+        if (combined.includes('experience') && combined.includes('year')) return '3';
+        if (combined.includes('notice')) return '30';
+        if (combined.includes('relocate') || combined.includes('willing')) return 'Yes';
+        if (combined.includes('sponsor') || combined.includes('visa')) return 'No';
+        if (combined.includes('authorized') || combined.includes('eligible')) return 'Yes';
+        if (fieldInfo.type === 'email') return 'user@example.com';
+        if (fieldInfo.type === 'tel') return '+919876543210';
+        if (fieldInfo.type === 'number') return '1';
+        if (fieldInfo.type === 'url') return 'https://linkedin.com';
+        
+        return '1'; // Default fallback
+    }
+
+    async function selectDropdownOptionFast(select, targetValue) {
+        const options = Array.from(select.options).filter(opt => 
             opt.value && opt.value !== '' && opt.value !== 'select'
         );
         
         if (options.length === 0) return false;
         
-        const searchValue = String(value).toLowerCase().trim();
+        const searchValue = String(targetValue).toLowerCase().trim();
         
-        // Exact match
+        // Quick match attempts
         for (const opt of options) {
-            if (opt.text.toLowerCase().trim() === searchValue) {
-                selectField.value = opt.value;
-                selectField.dispatchEvent(new Event('change', { bubbles: true }));
+            const optText = opt.text.toLowerCase().trim();
+            if (optText === searchValue || optText.includes(searchValue) || searchValue.includes(optText)) {
+                select.value = opt.value;
+                select.dispatchEvent(new Event('change', { bubbles: true }));
                 return true;
             }
         }
         
-        // Partial match
-        for (const opt of options) {
-            if (opt.text.toLowerCase().includes(searchValue)) {
-                selectField.value = opt.value;
-                selectField.dispatchEvent(new Event('change', { bubbles: true }));
-                return true;
+        // Number match
+        if (!isNaN(searchValue)) {
+            const numValue = parseFloat(searchValue);
+            for (const opt of options) {
+                const optNum = parseFloat(opt.text);
+                if (!isNaN(optNum) && Math.abs(optNum - numValue) < 2) {
+                    select.value = opt.value;
+                    select.dispatchEvent(new Event('change', { bubbles: true }));
+                    return true;
+                }
             }
         }
         
-        // First option fallback
-        selectField.value = options[0].value;
-        selectField.dispatchEvent(new Event('change', { bubbles: true }));
+        // First valid option
+        if (options[0]) {
+            select.value = options[0].value;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        
         return true;
     }
 
-    async function handleCheckboxes() {
+    async function handleAllDropdownsFast() {
+        const dropdowns = document.querySelectorAll('select');
+        await Promise.all(Array.from(dropdowns).map(handleDropdownFast));
+    }
+
+    async function handleDropdownFast(dropdown) {
+        if (!isVisible(dropdown) || dropdown.disabled) return;
+        if (dropdown.value && dropdown.value !== 'select' && dropdown.value !== '') return;
+        
+        await selectDropdownOptionFast(dropdown, '1'); // Default to first option
+    }
+
+    async function handleCheckboxesFast() {
         const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        
         for (const checkbox of checkboxes) {
-            if (!isVisible(checkbox) || checkbox.checked) continue;
+            if (!isVisible(checkbox) || checkbox.checked || checkbox.disabled) continue;
+            
             const label = getFieldLabel(checkbox).toLowerCase();
-            if (label.includes('agree') || label.includes('terms') || label.includes('policy')) {
+            if (label.includes('agree') || label.includes('terms') || label.includes('consent')) {
                 checkbox.checked = true;
                 checkbox.dispatchEvent(new Event('change', { bubbles: true }));
             }
         }
     }
 
-    async function handleRadios() {
-        const radioGroups = {};
-        const radios = document.querySelectorAll('input[type="radio"]');
-        
-        for (const radio of radios) {
-            if (!isVisible(radio)) continue;
-            const name = radio.name;
-            if (!name) continue;
-            if (!radioGroups[name]) radioGroups[name] = [];
-            radioGroups[name].push(radio);
-        }
-        
-        for (const groupName in radioGroups) {
-            const group = radioGroups[groupName];
-            if (group.some(r => r.checked)) continue;
-            
-            const yesOption = group.find(r => getFieldLabel(r).toLowerCase().includes('yes'));
-            if (yesOption) {
-                yesOption.checked = true;
-                yesOption.dispatchEvent(new Event('change', { bubbles: true }));
-            } else if (group.length > 0) {
-                group[0].checked = true;
-                group[0].dispatchEvent(new Event('change', { bubbles: true }));
-            }
-        }
+    async function handleDynamicContent() {
+        // Handle any dynamic content that might appear
+        await delay(300);
     }
 
-    async function handleDropdowns() {
-        const dropdowns = document.querySelectorAll('select');
-        for (const dropdown of dropdowns) {
-            if (!isVisible(dropdown) || dropdown.disabled) continue;
-            if (dropdown.value && dropdown.value !== 'select') continue;
-            
-            const fieldInfo = analyzeField(dropdown);
-            const value = await getBestFieldValue(fieldInfo);
-            
-            if (value) {
-                await handleSelectField(dropdown, value);
-            } else {
-                const options = Array.from(dropdown.options).filter(opt => opt.value && opt.value !== 'select');
-                if (options.length > 0) {
-                    dropdown.value = options[0].value;
-                    dropdown.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-            }
+    async function progressApplication() {
+        // Try SUBMIT first
+        if (await clickSubmitButton()) {
+            await delay(state.config.DELAYS.AFTER_SUBMIT);
+            return true;
         }
+        
+        // Try NEXT/CONTINUE
+        if (await clickNextButton()) {
+            await delay(state.config.DELAYS.AFTER_NEXT);
+            return true;
+        }
+        
+        // Try any primary button
+        if (await clickAnyPrimaryButton()) {
+            await delay(1000);
+            return true;
+        }
+        
+        return false;
     }
 
-    // ==================== UTILITY FUNCTIONS ====================
-    function getVisibleFormFields() {
+    async function clickFinalSubmit() {
+        if (await clickSubmitButton()) {
+            await delay(2000);
+            return await isApplicationSubmitted();
+        }
+        return false;
+    }
+
+    // ==================== ENHANCED BUTTON CLICKING ====================
+    async function clickSubmitButton() {
+        const buttons = getVisibleButtons();
+        
+        for (const btn of buttons) {
+            const text = btn.textContent.toLowerCase().trim();
+            const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
+            const combined = text + ' ' + aria;
+            
+            if ((text === 'submit application' || text === 'submit' || combined.includes('submit application')) &&
+                !combined.includes('next') && !combined.includes('continue')) {
+                
+                Logger.info('BUTTON', `✅ Clicking SUBMIT: "${text}"`);
+                highlightElement(btn, '#057642');
+                btn.click();
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    async function clickNextButton() {
+        const buttons = getVisibleButtons();
+        
+        for (const btn of buttons) {
+            const text = btn.textContent.toLowerCase().trim();
+            const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
+            const combined = text + ' ' + aria;
+            
+            if ((combined.includes('next') || combined.includes('continue') || combined.includes('review')) &&
+                !combined.includes('submit') && !combined.includes('back')) {
+                
+                Logger.info('BUTTON', `➡️ Clicking NEXT: "${text}"`);
+                highlightElement(btn, '#0A66C2');
+                btn.click();
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    async function clickAnyPrimaryButton() {
+        const buttons = getVisibleButtons();
+        
+        for (const btn of buttons) {
+            const classes = btn.className.toLowerCase();
+            const text = btn.textContent.toLowerCase().trim();
+            
+            if ((classes.includes('primary') || classes.includes('artdeco-button--primary')) && 
+                !text.includes('back') && !text.includes('cancel')) {
+                
+                btn.click();
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    function getVisibleButtons() {
+        return Array.from(document.querySelectorAll('button'))
+            .filter(b => isVisible(b) && !b.disabled);
+    }
+
+    // ==================== ENHANCED SUBMISSION VERIFICATION ====================
+    async function isApplicationSubmitted() {
+        // Check multiple success indicators
+        const successIndicators = [
+            () => document.querySelector('[data-test-modal-id*="submitted"]'),
+            () => document.querySelector('[data-test-modal-id*="application-submitted"]'),
+            () => document.querySelector('.artdeco-toast-item--success'),
+            () => {
+                const bodyText = document.body.textContent.toLowerCase();
+                return bodyText.includes('application submitted') || 
+                       bodyText.includes('application sent');
+            },
+            () => {
+                const modal = document.querySelector('.jobs-easy-apply-modal');
+                return !modal || !isVisible(modal);
+            }
+        ];
+        
+        for (const indicator of successIndicators) {
+            if (indicator()) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    // ==================== OPTIMIZED UTILITY FUNCTIONS ====================
+    function getAllVisibleFormFields() {
         return Array.from(document.querySelectorAll(`
-            input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([disabled]), 
-            textarea:not([disabled]), 
+            input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([disabled]),
+            textarea:not([disabled]),
             select:not([disabled])
         `)).filter(field => isVisible(field));
     }
 
-    function analyzeField(field) {
-        return {
-            type: field.type || field.tagName.toLowerCase(),
-            name: field.name || '',
-            id: field.id || '',
-            label: getFieldLabel(field),
-            placeholder: field.placeholder || ''
-        };
-    }
-
     function getFieldLabel(field) {
-        const label = document.querySelector(`label[for="${field.id}"]`);
-        if (label) return label.textContent.trim();
+        if (field.id) {
+            const label = document.querySelector(`label[for="${field.id}"]`);
+            if (label) return label.textContent.trim();
+        }
         
         const parentLabel = field.closest('label');
         if (parentLabel) return parentLabel.textContent.trim();
         
-        return field.getAttribute('aria-label') || field.placeholder || '';
+        const ariaLabel = field.getAttribute('aria-label');
+        if (ariaLabel) return ariaLabel.trim();
+        
+        const labelledBy = field.getAttribute('aria-labelledby');
+        if (labelledBy) {
+            const labelElement = document.getElementById(labelledBy);
+            if (labelElement) return labelElement.textContent.trim();
+        }
+        
+        if (field.placeholder) return field.placeholder.trim();
+        if (field.name) return field.name.replace(/[_-]/g, ' ').trim();
+        
+        return '';
+    }
+
+    function getJobId(card) {
+        return card.getAttribute('data-job-id') || 
+               card.getAttribute('data-occludable-job-id') ||
+               card.querySelector('[data-job-id]')?.getAttribute('data-job-id') ||
+               `job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     }
 
     function isVisible(element) {
         if (!element) return false;
         const rect = element.getBoundingClientRect();
         const style = window.getComputedStyle(element);
-        return rect.width > 0 && rect.height > 0 && 
-               style.visibility !== 'hidden' && style.display !== 'none' && 
+        return rect.width > 0 && 
+               rect.height > 0 && 
+               style.visibility !== 'hidden' && 
+               style.display !== 'none' && 
                style.opacity !== '0';
     }
 
     async function scrollIntoView(element) {
         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        await delay(500);
+        await delay(300);
     }
 
     async function scrollToLoadMoreJobs() {
-        Logger.info('SCROLL', 'Scrolling to load more jobs');
-        const jobList = document.querySelector('.scaffold-layout__list') || 
-                       document.querySelector('.jobs-search-results__list');
-        if (jobList) {
-            jobList.scrollBy(0, 1000);
-        } else {
-            window.scrollBy(0, 1000);
-        }
+        Logger.info('SCROLL', 'Loading more jobs...');
+        window.scrollBy({ top: 800, behavior: 'smooth' });
         await delay(2000);
     }
 
@@ -1163,7 +915,8 @@ Keep answers under 10 words.`;
             'button[aria-label*="Dismiss"]',
             'button[aria-label*="dismiss"]',
             'button[aria-label*="Close"]',
-            '.artdeco-modal__dismiss'
+            'button[aria-label*="close"]',
+            'button.artdeco-modal__dismiss'
         ];
         
         for (const selector of closeSelectors) {
@@ -1171,89 +924,103 @@ Keep answers under 10 words.`;
             for (const button of buttons) {
                 if (isVisible(button)) {
                     button.click();
-                    await delay(500);
+                    await delay(400);
                     
-                    // Handle discard dialog
+                    // Handle discard confirmation
                     const discardBtn = Array.from(document.querySelectorAll('button')).find(b => 
                         b.textContent.toLowerCase().includes('discard')
                     );
+                    
                     if (discardBtn && isVisible(discardBtn)) {
                         discardBtn.click();
-                        await delay(500);
+                        await delay(300);
                     }
                     
                     return;
                 }
             }
         }
-        
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-        await delay(500);
     }
 
     function highlightElement(element, color) {
-        element.classList.add('fillora-highlight');
-        const original = element.style.boxShadow;
+        const originalShadow = element.style.boxShadow;
         element.style.boxShadow = `0 0 0 3px ${color}`;
         setTimeout(() => {
-            element.style.boxShadow = original;
-            element.classList.remove('fillora-highlight');
-        }, 2000);
+            element.style.boxShadow = originalShadow;
+        }, 800);
     }
 
     function showNotification(message, type = 'info') {
         const notification = document.createElement('div');
         notification.textContent = message;
         notification.style.cssText = `
-            position: fixed; top: 20px; right: 20px; z-index: 999999;
-            background: ${type === 'success' ? '#057642' : type === 'error' ? '#cc1016' : '#0A66C2'};
-            color: white; padding: 12px 20px; border-radius: 8px;
-            font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 999999;
+            background: ${type === 'success' ? '#057642' : '#0A66C2'};
+            color: white;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 13px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         `;
+        
         document.body.appendChild(notification);
-        setTimeout(() => notification.remove(), 3000);
+        
+        setTimeout(() => {
+            notification.remove();
+        }, 3000);
+    }
+
+    function calculateExpectedSalary(experience) {
+        const baseSalaries = {
+            0: 3.5, 1: 5, 2: 7, 3: 9, 4: 12, 5: 16, 7: 22
+        };
+        
+        for (let exp = 7; exp >= 0; exp--) {
+            if (experience >= exp) return baseSalaries[exp];
+        }
+        return 8;
     }
 
     function delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    // ==================== AUTOFILL FUNCTIONALITY ====================
+    function timeout(ms, returnValue) {
+        return new Promise(resolve => setTimeout(() => resolve(returnValue), ms));
+    }
+
+    // ==================== AUTOFILL API ====================
     async function performAutoFill(userData) {
-        Logger.info('AUTOFILL', 'Starting AutoFill');
-        
         state.userData = userData;
-        const fields = getVisibleFormFields();
-        let fieldsFilled = 0;
+        state.fieldCache.clear();
         
-        for (const field of fields) {
+        const fields = getAllVisibleFormFields();
+        let filledCount = 0;
+        
+        // Fast parallel processing
+        await Promise.all(fields.map(async (field) => {
             try {
-                if (field.value) continue;
-                const fieldInfo = analyzeField(field);
-                const value = await getBestFieldValue(fieldInfo);
-                if (value) {
-                    await setFieldValue(field, value, fieldInfo);
-                    fieldsFilled++;
+                const before = field.value;
+                await fillFieldUltraFast(field);
+                if (field.value && field.value !== before) {
+                    filledCount++;
                 }
-                await delay(200);
             } catch (error) {
-                Logger.warn('AUTOFILL', `Field error: ${error.message}`);
+                // Continue on error
             }
-        }
+        }));
         
-        await handleCheckboxes();
-        await handleRadios();
-        await handleDropdowns();
-        
-        const successRate = fields.length > 0 ? Math.round((fieldsFilled / fields.length) * 100) : 0;
-        
-        Logger.success('AUTOFILL', `Complete: ${fieldsFilled}/${fields.length} (${successRate}%)`);
+        await handleCheckboxesFast();
+        await handleAllDropdownsFast();
         
         return {
             success: true,
-            fieldsFilled,
-            totalFields: fields.length,
-            successRate
+            fieldsFilled: filledCount,
+            totalFields: fields.length
         };
     }
 
@@ -1264,9 +1031,9 @@ Keep answers under 10 words.`;
         initialize();
     }
 
-    Logger.success('SYSTEM', '🚀 Fillora Pro v2.0 - Enterprise Edition Ready');
-    Logger.info('SYSTEM', 'Built for reliability, scalability, and user trust');
+    Logger.success('SYSTEM', '🚀 Fillora v5.0 - ULTIMATE automation ready!');
+    Logger.speed('SYSTEM', '⚡ Optimized for speed: <60 seconds per job');
 
 } else {
-    console.log('⚠️ Fillora already initialized');
+    console.log('⚠️ Fillora already initialized - skipping');
 }
