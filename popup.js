@@ -2,6 +2,51 @@
 // Production-grade popup with advanced features
 console.log('🚀 [FILLORA ULTIMATE] Loading popup system...');
 
+// ==================== CONFIG INITIALIZATION ====================
+// This loads config from window.FILLORA_CONFIG (set by config.js) and stores in chrome.storage
+async function initializeConfigFromWindow() {
+    try {
+        // Try to get config from a LinkedIn tab (which has config.js loaded)
+        const tabs = await chrome.tabs.query({ url: "*://*.linkedin.com/*" });
+        
+        if (tabs && tabs.length > 0) {
+            try {
+                // Execute script to get config from LinkedIn page context
+                const results = await chrome.scripting.executeScript({
+                    target: { tabId: tabs[0].id },
+                    func: () => {
+                        return typeof window.FILLORA_CONFIG !== 'undefined' ? window.FILLORA_CONFIG : null;
+                    }
+                });
+                
+                if (results && results[0] && results[0].result) {
+                    const config = results[0].result;
+                    await chrome.storage.local.set({ fillora_config: config });
+                    console.log('✅ [POPUP] Config loaded from LinkedIn tab and stored');
+                    return true;
+                }
+            } catch (e) {
+                console.log('ℹ️ [POPUP] Could not read from LinkedIn tab:', e.message);
+            }
+        }
+        
+        // Check if config already exists in storage
+        const result = await chrome.storage.local.get('fillora_config');
+        if (result.fillora_config) {
+            console.log('✅ [POPUP] Config already in storage');
+            return true;
+        }
+        
+        console.warn('⚠️ [POPUP] No config found. Please open LinkedIn page first to load config.');
+        showError('Please open LinkedIn.com first to initialize the extension.');
+        return false;
+        
+    } catch (error) {
+        console.error('❌ [POPUP] Config initialization error:', error);
+        return false;
+    }
+}
+
 // ==================== STATE MANAGEMENT ====================
 let appState = {
     isAuthenticated: false,
@@ -320,7 +365,7 @@ async function startAutoFill() {
         try {
             await chrome.scripting.executeScript({
                 target: { tabId: currentTab.id },
-                files: ['content.js']
+                files: ['config.js', 'init.js', 'content.js']
             });
             await delay(1000);
         } catch (e) {
@@ -434,7 +479,7 @@ async function startLinkedInAutomation() {
         try {
             await chrome.scripting.executeScript({
                 target: { tabId: currentTab.id },
-                files: ['content.js']
+                files: ['config.js', 'init.js', 'content.js']
             });
             await delay(2000);
         } catch (e) {
@@ -534,6 +579,9 @@ async function init() {
     
     // Add CSS animations
     addAnimationStyles();
+    
+    // Initialize config first
+    await initializeConfigFromWindow();
     
     try {
         // Check authentication status
