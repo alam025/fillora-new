@@ -3,31 +3,15 @@
 console.log('🚀 [FILLORA ULTIMATE] Loading popup system...');
 
 // ==================== CONFIG INITIALIZATION ====================
-// This loads config from window.FILLORA_CONFIG (set by config.js) and stores in chrome.storage
+// Load config from window.FILLORA_CONFIG (loaded by config.js in popup.html)
 async function initializeConfigFromWindow() {
     try {
-        // Try to get config from a LinkedIn tab (which has config.js loaded)
-        const tabs = await chrome.tabs.query({ url: "*://*.linkedin.com/*" });
-        
-        if (tabs && tabs.length > 0) {
-            try {
-                // Execute script to get config from LinkedIn page context
-                const results = await chrome.scripting.executeScript({
-                    target: { tabId: tabs[0].id },
-                    func: () => {
-                        return typeof window.FILLORA_CONFIG !== 'undefined' ? window.FILLORA_CONFIG : null;
-                    }
-                });
-                
-                if (results && results[0] && results[0].result) {
-                    const config = results[0].result;
-                    await chrome.storage.local.set({ fillora_config: config });
-                    console.log('✅ [POPUP] Config loaded from LinkedIn tab and stored');
-                    return true;
-                }
-            } catch (e) {
-                console.log('ℹ️ [POPUP] Could not read from LinkedIn tab:', e.message);
-            }
+        // config.js is loaded in popup.html, so window.FILLORA_CONFIG should be available
+        if (typeof window.FILLORA_CONFIG !== 'undefined') {
+            // Store in chrome.storage for background script
+            await chrome.storage.local.set({ fillora_config: window.FILLORA_CONFIG });
+            console.log('✅ [POPUP] Config loaded from window.FILLORA_CONFIG and stored');
+            return true;
         }
         
         // Check if config already exists in storage
@@ -37,12 +21,13 @@ async function initializeConfigFromWindow() {
             return true;
         }
         
-        console.warn('⚠️ [POPUP] No config found. Please open LinkedIn page first to load config.');
-        showError('Please open LinkedIn.com first to initialize the extension.');
+        console.error('❌ [POPUP] window.FILLORA_CONFIG not found! Make sure config.js is loaded in popup.html');
+        showError('Configuration error. Please reload the extension.');
         return false;
         
     } catch (error) {
         console.error('❌ [POPUP] Config initialization error:', error);
+        showError('Failed to load configuration.');
         return false;
     }
 }
