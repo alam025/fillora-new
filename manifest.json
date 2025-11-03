@@ -25,7 +25,7 @@
   "content_scripts": [
     {
       "matches": ["https://*.linkedin.com/*"],
-      "js": ["config.js", "content.js"],
+      "js": ["config.js", "init.js", "content.js"],
       "run_at": "document_idle"
     }
   ],
@@ -43,12 +43,5 @@
     "16": "icon16.png",
     "48": "icon48.png",
     "128": "icon128.png"
-  },
-  
-  "web_accessible_resources": [
-    {
-      "resources": ["config.js"],
-      "matches": ["https://*.linkedin.com/*"]
-    }
-  ]
+  }
 }
