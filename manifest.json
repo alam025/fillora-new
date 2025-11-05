@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Fillora - LinkedIn Auto Apply",
-  "version": "2.0.0",
-  "description": "Intelligent LinkedIn job application automation with AI-powered form filling",
+  "name": "Fillora - AI AutoFill & LinkedIn Automation",
+  "version": "1.0.0",
+  "description": "Intelligent form filling and LinkedIn Easy Apply automation",
   
   "permissions": [
     "storage",
@@ -12,21 +12,19 @@
   ],
   
   "host_permissions": [
-    "https://*.linkedin.com/*",
-    "https://api.openai.com/*",
-    "https://*.supabase.co/*",
-    "https://api.ocr.space/*"
+    "<all_urls>"
   ],
   
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   
   "content_scripts": [
     {
-      "matches": ["https://*.linkedin.com/*"],
-      "js": ["config.js", "init.js", "content.js"],
-      "run_at": "document_idle"
+      "matches": ["<all_urls>"],
+      "js": ["config.js", "content.js"],
+      "run_at": "document_start"
     }
   ],
   
@@ -39,16 +37,16 @@
     }
   },
   
-  "web_accessible_resources": [
-    {
-      "resources": ["config.js"],
-      "matches": ["https://*.linkedin.com/*"]
-    }
-  ],
-  
   "icons": {
     "16": "icon16.png",
     "48": "icon48.png",
     "128": "icon128.png"
-  }
+  },
+  
+  "web_accessible_resources": [
+    {
+      "resources": ["config.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }
