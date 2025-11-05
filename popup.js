@@ -1,36 +1,6 @@
-// Fillora Chrome Extension - ULTIMATE POPUP SYSTEM
-// Production-grade popup with advanced features
-console.log('🚀 [FILLORA ULTIMATE] Loading popup system...');
-
-// ==================== CONFIG INITIALIZATION ====================
-// Load config from window.FILLORA_CONFIG (loaded by config.js in popup.html)
-async function initializeConfigFromWindow() {
-    try {
-        // config.js is loaded in popup.html, so window.FILLORA_CONFIG should be available
-        if (typeof window.FILLORA_CONFIG !== 'undefined') {
-            // Store in chrome.storage for background script
-            await chrome.storage.local.set({ fillora_config: window.FILLORA_CONFIG });
-            console.log('✅ [POPUP] Config loaded from window.FILLORA_CONFIG and stored');
-            return true;
-        }
-        
-        // Check if config already exists in storage
-        const result = await chrome.storage.local.get('fillora_config');
-        if (result.fillora_config) {
-            console.log('✅ [POPUP] Config already in storage');
-            return true;
-        }
-        
-        console.error('❌ [POPUP] window.FILLORA_CONFIG not found! Make sure config.js is loaded in popup.html');
-        showError('Configuration error. Please reload the extension.');
-        return false;
-        
-    } catch (error) {
-        console.error('❌ [POPUP] Config initialization error:', error);
-        showError('Failed to load configuration.');
-        return false;
-    }
-}
+// Fillora Chrome Extension - FINAL FIXED POPUP
+// Matches background-FIXED.js actions perfectly
+console.log('🚀 [FILLORA POPUP] Loading...');
 
 // ==================== STATE MANAGEMENT ====================
 let appState = {
@@ -350,18 +320,18 @@ async function startAutoFill() {
         try {
             await chrome.scripting.executeScript({
                 target: { tabId: currentTab.id },
-                files: ['config.js', 'init.js', 'content.js']
+                files: ['config.js', 'content.js']
             });
             await delay(1000);
         } catch (e) {
             console.log('ℹ️ Content script already loaded');
         }
 
-        // Fetch comprehensive user data
+        // ✅ FIXED: Use FETCH_TRIPLE_SOURCE_DATA instead of FETCH_USER_DATA_FOR_AUTOFILL
         if (autofillBtn) autofillBtn.innerHTML = '📊 Loading your data...';
         
         const userDataResponse = await chrome.runtime.sendMessage({
-            action: 'FETCH_USER_DATA_FOR_AUTOFILL',
+            action: 'FETCH_TRIPLE_SOURCE_DATA',  // ✅ CORRECT ACTION!
             userId: appState.user.id
         });
 
@@ -369,14 +339,20 @@ async function startAutoFill() {
             throw new Error('Failed to load user data: ' + userDataResponse.error);
         }
 
-        console.log('✅ User data loaded:', Object.keys(userDataResponse.data).length, 'fields');
+        console.log('✅ Triple-source data loaded:', {
+            database: Object.keys(userDataResponse.data.database || {}).length,
+            resume: Object.keys(userDataResponse.data.resume || {}).length,
+            merged: Object.keys(userDataResponse.data.merged || {}).length
+        });
 
-        // Start AutoFill
+        // Start AutoFill with triple-source data
         if (autofillBtn) autofillBtn.innerHTML = '🤖 Filling form intelligently...';
         
         const result = await chrome.tabs.sendMessage(currentTab.id, {
             action: 'PERFORM_AUTOFILL',
-            userData: userDataResponse.data
+            userData: userDataResponse.data.merged,  // Use merged data
+            databaseData: userDataResponse.data.database,
+            resumeData: userDataResponse.data.resume
         });
 
         if (result && result.success) {
@@ -429,7 +405,7 @@ async function startLinkedInAutomation() {
     console.log('🔗 [LINKEDIN] Starting advanced LinkedIn automation...');
     
     const linkedinBtn = document.getElementById('linkedin-automation-btn');
-    const originalHTML = linkedinBtn?.innerHTML || '🔗 LinkedIn Automation (5 Jobs)';
+    const originalHTML = linkedinBtn?.innerHTML || '🔗 LinkedIn Automation';
     
     if (linkedinBtn) {
         linkedinBtn.disabled = true;
@@ -454,7 +430,7 @@ async function startLinkedInAutomation() {
             showInfo('Navigating to LinkedIn job search...');
             
             await chrome.tabs.update(currentTab.id, {
-                url: 'https://www.linkedin.com/jobs/search/?keywords=data%20analyst&location=India&f_AL=true&f_TPR=r86400&sortBy=DD'
+                url: 'https://www.linkedin.com/jobs/search/?f_AL=true&sortBy=DD'
             });
             await delay(8000);
         }
@@ -464,18 +440,18 @@ async function startLinkedInAutomation() {
         try {
             await chrome.scripting.executeScript({
                 target: { tabId: currentTab.id },
-                files: ['config.js', 'init.js', 'content.js']
+                files: ['config.js', 'content.js']
             });
             await delay(2000);
         } catch (e) {
             console.log('ℹ️ Content script already loaded');
         }
 
-        // Fetch user data
+        // ✅ FIXED: Use FETCH_TRIPLE_SOURCE_DATA
         if (linkedinBtn) linkedinBtn.innerHTML = '📊 Loading your profile data...';
         
         const userDataResponse = await chrome.runtime.sendMessage({
-            action: 'FETCH_USER_DATA_FOR_AUTOFILL',
+            action: 'FETCH_TRIPLE_SOURCE_DATA',  // ✅ CORRECT ACTION!
             userId: appState.user.id
         });
 
@@ -483,20 +459,22 @@ async function startLinkedInAutomation() {
             throw new Error('Failed to load user data: ' + userDataResponse.error);
         }
 
-        console.log('✅ User data loaded for LinkedIn:', Object.keys(userDataResponse.data).length, 'fields');
+        console.log('✅ Triple-source data loaded for LinkedIn');
 
-        // Start LinkedIn automation
-        if (linkedinBtn) linkedinBtn.innerHTML = '🚀 Applying to jobs (0/5)...';
-        showInfo('LinkedIn automation started! This may take 2-3 minutes.');
+        // Start LinkedIn automation with triple-source data
+        if (linkedinBtn) linkedinBtn.innerHTML = '🚀 Applying to jobs...';
+        showInfo('LinkedIn automation started! Easy Apply filter enabled.');
         
         const result = await chrome.tabs.sendMessage(currentTab.id, {
             action: 'START_LINKEDIN_AUTOMATION',
-            userData: userDataResponse.data
+            userData: userDataResponse.data.merged,  // Use merged data
+            databaseData: userDataResponse.data.database,
+            resumeData: userDataResponse.data.resume
         });
 
         if (result && result.success) {
             const timeTaken = ((Date.now() - appState.automation.startTime) / 1000).toFixed(0);
-            const message = `LinkedIn Complete! ${result.applicationsSubmitted}/5 jobs applied in ${timeTaken}s`;
+            const message = `LinkedIn Complete! ${result.applicationsSubmitted} jobs applied in ${timeTaken}s`;
             
             console.log('✅ [LINKEDIN]', message);
             showSuccess(message, 5000);
@@ -564,9 +542,6 @@ async function init() {
     
     // Add CSS animations
     addAnimationStyles();
-    
-    // Initialize config first
-    await initializeConfigFromWindow();
     
     try {
         // Check authentication status
@@ -764,7 +739,6 @@ window.addEventListener('unhandledrejection', function(e) {
     showError('An unexpected error occurred. Please refresh and try again.');
 });
 
-console.log('✅ [FILLORA ULTIMATE] Popup system loaded successfully!');
-console.log('🎯 Features: Smart AutoFill + Advanced LinkedIn Automation');
+console.log('✅ [FILLORA POPUP] Loaded successfully!');
+console.log('🎯 Features: Triple-Source AutoFill + LinkedIn Easy Apply');
 console.log('⚡ Keyboard Shortcuts: Ctrl+Enter (AutoFill) | Ctrl+L (LinkedIn)');
-console.log('📊 Ready for production use!');
