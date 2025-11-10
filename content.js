@@ -109,6 +109,8 @@ if (typeof window.filloraInitialized === 'undefined') {
             
             showDataPanel(contentState.databaseData, contentState.resumeData);
             
+            // ==================== FIRST PASS ====================
+            console.log('\n🔄 FIRST PASS: Filling all fields...');
             let fieldsFilled = 0;
             for (const field of fields) {
                 if (await fillFieldIntelligently(field)) {
@@ -118,10 +120,95 @@ if (typeof window.filloraInitialized === 'undefined') {
                 }
             }
             
+            console.log(`✅ First pass complete: ${fieldsFilled}/${fields.length} fields filled`);
+            
+            // ==================== SECOND PASS: Catch Missed Fields ====================
+            console.log('\n🔄 SECOND PASS: Checking for missed fields...');
+            await delay(500);
+            
+            const fieldsAfterFirstPass = getAllVisibleFields();
+            const emptyFields = fieldsAfterFirstPass.filter(f => !isFieldAlreadyFilled(f));
+            
+            if (emptyFields.length > 0) {
+                console.log(`⚠️ Found ${emptyFields.length} empty fields after first pass`);
+                console.log('🔧 Attempting to fill missed fields with enhanced logic...');
+                
+                let secondPassFilled = 0;
+                for (const field of emptyFields) {
+                    const fieldInfo = getFieldInformation(field);
+                    console.log(`   🔍 Missed field: "${fieldInfo.label}" (${field.type || field.tagName})`);
+                    
+                    // Try harder to fill this field
+                    let filled = false;
+                    
+                    // Try exact match again
+                    let value = getExactMatchValue(fieldInfo);
+                    
+                    // If still no value, use AI (with more attempts)
+                    if (!value && contentState.openaiKey) {
+                        console.log(`      🤖 Using AI to fill "${fieldInfo.label}"`);
+                        value = await getAIPoweredValue(fieldInfo);
+                    }
+                    
+                    // If still empty, make intelligent guess
+                    if (!value) {
+                        value = makeIntelligentGuess(fieldInfo);
+                    }
+                    
+                    // Fill the field
+                    if (value && value.toString().trim()) {
+                        if (field.tagName.toLowerCase() === 'select') {
+                            filled = await fillDropdownIntelligently(field, fieldInfo);
+                        } else if (field.type === 'file') {
+                            filled = await uploadResumeFile(field);
+                        } else if (field.type === 'checkbox') {
+                            filled = fillCheckboxField(field, fieldInfo);
+                        } else if (field.type === 'radio') {
+                            filled = fillRadioField(field, fieldInfo);
+                        } else {
+                            field.value = value.toString().trim();
+                            triggerFieldEvents(field);
+                            filled = true;
+                        }
+                        
+                        if (filled) {
+                            secondPassFilled++;
+                            highlightField(field);
+                            console.log(`      ✅ Filled in second pass: "${value}"`);
+                            await delay(contentState.config.DELAYS.AFTER_FIELD_FILL);
+                        }
+                    } else {
+                        console.log(`      ⚠️ Could not determine value for "${fieldInfo.label}"`);
+                    }
+                }
+                
+                fieldsFilled += secondPassFilled;
+                console.log(`✅ Second pass complete: ${secondPassFilled} additional fields filled`);
+            } else {
+                console.log('✅ No empty fields found - all fields filled in first pass!');
+            }
+            
+            // ==================== FINAL VERIFICATION ====================
+            console.log('\n🔍 FINAL VERIFICATION: Checking all fields...');
+            await delay(300);
+            
+            const finalFields = getAllVisibleFields();
+            const stillEmpty = finalFields.filter(f => !isFieldAlreadyFilled(f));
+            
+            if (stillEmpty.length > 0) {
+                console.log(`⚠️ ${stillEmpty.length} fields still empty after two passes:`);
+                stillEmpty.forEach(f => {
+                    const info = getFieldInformation(f);
+                    console.log(`   • "${info.label}" (${f.type || f.tagName})`);
+                });
+            } else {
+                console.log('✅ Perfect! All fields filled successfully!');
+            }
+            
             const successRate = fields.length > 0 ? Math.round((fieldsFilled / fields.length) * 100) : 0;
             const timeTaken = ((Date.now() - startTime) / 1000).toFixed(2);
             
-            console.log(`✅ Filled ${fieldsFilled}/${fields.length} fields (${successRate}%) in ${timeTaken}s`);
+            console.log(`\n✅ AUTOFILL COMPLETE: ${fieldsFilled}/${fields.length} fields (${successRate}%) in ${timeTaken}s\n`);
             showNotification(`✅ AutoFill Complete!\n${fieldsFilled}/${fields.length} fields (${successRate}%)`, 'success', 5000);
             
             return {
@@ -164,19 +251,29 @@ if (typeof window.filloraInitialized === 'undefined') {
             console.log('✅ Resume loaded:', Object.keys(resumeResponse.data).length, 'fields');
             console.log('📄 Resume data:', resumeResponse.data);
             
-            // Calculate total experience from date ranges if not already present
+            // CRITICAL: ALWAYS recalculate experience from date ranges
+            // Don't trust pre-existing totalExperience value as it might be wrong!
             console.log('\n🔍 Checking experience in resume data...');
-            console.log('   resume.totalExperience:', resumeResponse.data.totalExperience);
+            console.log('   resume.totalExperience (PRE-EXISTING):', resumeResponse.data.totalExperience);
             console.log('   resume.experience:', resumeResponse.data.experience);
             console.log('   resume.workExperience:', resumeResponse.data.workExperience);
+            console.log('   resume.professionalExperience:', resumeResponse.data.professionalExperience);
             
-            if (!contentState.resumeData.totalExperience || contentState.resumeData.totalExperience === 0) {
-                console.log('\n🧮 No totalExperience found, calculating from resume...');
-                contentState.resumeData.totalExperience = calculateTotalExperience(resumeResponse.data);
-                console.log(`✅ Calculated and set totalExperience: ${contentState.resumeData.totalExperience} years\n`);
+            // FORCE RECALCULATION - Don't trust existing value!
+            console.log('\n🧮 FORCING recalculation from date ranges (ignoring pre-existing value)...');
+            const calculatedExp = calculateTotalExperience(resumeResponse.data);
+            
+            // Use calculated value if it's greater than 0, otherwise fall back to database
+            if (calculatedExp > 0) {
+                contentState.resumeData.totalExperience = calculatedExp;
+                console.log(`✅ OVERRIDE: Set totalExperience to ${calculatedExp} years (calculated)\n`);
+            } else if (contentState.databaseData?.totalExperience) {
+                contentState.resumeData.totalExperience = contentState.databaseData.totalExperience;
+                console.log(`✅ FALLBACK: Using database totalExperience: ${contentState.databaseData.totalExperience} years\n`);
             } else {
-                console.log(`ℹ️ totalExperience already present: ${contentState.resumeData.totalExperience} years`);
+                console.warn(`⚠️ Could not calculate experience, keeping original: ${resumeResponse.data.totalExperience} years\n`);
             }
+            
         } else {
             console.warn('⚠️ No resume data loaded');
         }
@@ -184,7 +281,7 @@ if (typeof window.filloraInitialized === 'undefined') {
         console.log('\n📊 FINAL DATA STATE:');
         console.log('   Database fields:', Object.keys(contentState.databaseData || {}).length);
         console.log('   Resume fields:', Object.keys(contentState.resumeData || {}).length);
-        console.log('   Total Experience:', contentState.resumeData?.totalExperience || contentState.databaseData?.totalExperience || 0, 'years');
+        console.log('   Total Experience (FINAL):', contentState.resumeData?.totalExperience || contentState.databaseData?.totalExperience || 0, 'years');
         console.log('');
     }
 
@@ -192,91 +289,134 @@ if (typeof window.filloraInitialized === 'undefined') {
     function calculateTotalExperience(resumeData) {
         try {
             console.log('🧮 Calculating total experience from resume...');
-            console.log('📄 Resume data:', resumeData);
+            console.log('📄 Resume data received:', resumeData);
             
-            // Convert resume data to string for pattern matching
+            // Convert ENTIRE resume data to string for pattern matching
+            // This ensures we catch date ranges regardless of which field they're in
             const resumeText = JSON.stringify(resumeData);
+            console.log('📝 Resume text length:', resumeText.length, 'characters');
             
             const currentYear = new Date().getFullYear();
-            const currentMonth = new Date().getMonth() + 1; // 1-12
+            const currentMonth = new Date().getMonth() + 1;
             
             let totalMonths = 0;
             const foundRanges = [];
+            const processedRanges = new Set();
             
-            // Find all 4-digit years in the text
-            const allYears = resumeText.match(/\b(19|20)\d{2}\b/g);
-            console.log('📅 Found years in resume:', allYears);
+            // Pattern to match date ranges like:
+            // "2021 – 2022", "2021-2022", "2021 - 2022"
+            // "2022 – Present", "2022-Present", "2022 - Present"
+            const rangePattern = /\b(19|20)\d{2}\s*[–\-—]\s*((19|20)\d{2}|present|current)\b/gi;
+            const matches = Array.from(resumeText.matchAll(rangePattern));
             
-            // Pattern: Extract date ranges like "2021 - 2022" or "2021-2022" or "2022 – Present"
-            // This pattern handles: 2021-2022, 2021 - 2022, 2021 – 2022, 2022-Present, 2022 - Present
-            const rangePattern = /\b(19|20)\d{2}\s*[-–—]\s*((19|20)\d{2}|present|current)\b/gi;
-            const matches = resumeText.matchAll(rangePattern);
+            console.log(`🔍 Found ${matches.length} potential date ranges in resume`);
             
             for (const match of matches) {
                 const fullMatch = match[0];
-                console.log('   🔍 Found range:', fullMatch);
                 
-                // Extract start year (first 4 digits)
+                // Normalize the match for duplicate detection
+                const normalized = fullMatch.replace(/\s+/g, '').toLowerCase();
+                if (processedRanges.has(normalized)) {
+                    console.log(`   ⏭️ Skipping duplicate: ${fullMatch}`);
+                    continue;
+                }
+                processedRanges.add(normalized);
+                
+                console.log(`   🔍 Processing range: "${fullMatch}"`);
+                
+                // Extract start year (first 4-digit year)
                 const startYearMatch = fullMatch.match(/\b(19|20)\d{2}\b/);
-                if (!startYearMatch) continue;
+                if (!startYearMatch) {
+                    console.log(`      ❌ Could not extract start year`);
+                    continue;
+                }
                 const startYear = parseInt(startYearMatch[0]);
                 
-                // Extract end year (second 4 digits or "present"/"current")
-                const parts = fullMatch.split(/[-–—]/);
-                const endPart = parts[1].trim().toLowerCase();
+                // Extract end year or "present"
+                const parts = fullMatch.split(/[–\-—]/);
+                if (parts.length < 2) {
+                    console.log(`      ❌ Could not split into start and end`);
+                    continue;
+                }
                 
+                const endPart = parts[1].trim().toLowerCase();
                 let endYear, endMonth;
                 
                 if (endPart.includes('present') || endPart.includes('current')) {
                     endYear = currentYear;
                     endMonth = currentMonth;
-                    console.log(`      Start: ${startYear}, End: Present (${currentYear})`);
+                    console.log(`      📅 Start: ${startYear}, End: Present (${currentYear})`);
                 } else {
                     const endYearMatch = endPart.match(/\b(19|20)\d{2}\b/);
                     if (endYearMatch) {
                         endYear = parseInt(endYearMatch[0]);
-                        endMonth = 12; // Assume end of year if no month specified
-                        console.log(`      Start: ${startYear}, End: ${endYear}`);
+                        endMonth = 12; // Assume full year
+                        console.log(`      📅 Start: ${startYear}, End: ${endYear}`);
                     } else {
+                        console.log(`      ❌ Could not extract end year from: "${endPart}"`);
                         continue;
                     }
                 }
                 
                 // Validate years
                 if (startYear < 1990 || startYear > currentYear) {
-                    console.log(`      ❌ Invalid start year: ${startYear}`);
+                    console.log(`      ❌ Invalid start year: ${startYear} (must be 1990-${currentYear})`);
                     continue;
                 }
-                if (endYear < startYear || endYear > currentYear) {
-                    console.log(`      ❌ Invalid end year: ${endYear}`);
+                if (endYear < startYear) {
+                    console.log(`      ❌ End year (${endYear}) before start year (${startYear})`);
+                    continue;
+                }
+                if (endYear > currentYear) {
+                    console.log(`      ❌ End year (${endYear}) is in the future`);
                     continue;
                 }
                 
-                // Calculate months (assuming start of start year to end of end year)
-                const startMonth = 1; // Assume start of year if no month specified
+                // Calculate months
+                // From start of start year to end of end year
+                const startMonth = 1; // Assume January of start year
                 const monthsInRange = (endYear - startYear) * 12 + (endMonth - startMonth);
                 
-                if (monthsInRange > 0) {
-                    totalMonths += monthsInRange;
-                    const yearsInRange = Math.round(monthsInRange / 12 * 10) / 10;
-                    foundRanges.push({
-                        range: fullMatch,
-                        startYear,
-                        endYear,
-                        months: monthsInRange,
-                        years: yearsInRange
-                    });
-                    console.log(`      ✅ ${startYear} to ${endYear === currentYear ? 'Present' : endYear} = ${yearsInRange} years (${monthsInRange} months)`);
+                if (monthsInRange <= 0) {
+                    console.log(`      ❌ Invalid range: ${monthsInRange} months`);
+                    continue;
                 }
+                
+                totalMonths += monthsInRange;
+                const yearsInRange = Math.round(monthsInRange / 12 * 10) / 10;
+                
+                foundRanges.push({
+                    text: fullMatch,
+                    startYear,
+                    endYear,
+                    months: monthsInRange,
+                    years: yearsInRange
+                });
+                
+                console.log(`      ✅ ${startYear} to ${endYear === currentYear ? 'Present' : endYear} = ${yearsInRange} years (${monthsInRange} months)`);
             }
             
+            // Calculate total years
             const totalYears = Math.round(totalMonths / 12 * 10) / 10;
             
-            console.log('\n📊 Experience Calculation Summary:');
-            foundRanges.forEach(r => {
-                console.log(`   • ${r.range} = ${r.years} years`);
-            });
-            console.log(`   ✅ TOTAL EXPERIENCE: ${totalYears} years (${totalMonths} months)\n`);
+            console.log('\n📊 ═══════════════════════════════════════════════');
+            console.log('📊 EXPERIENCE CALCULATION SUMMARY:');
+            console.log('📊 ═══════════════════════════════════════════════');
+            
+            if (foundRanges.length === 0) {
+                console.log('   ⚠️ No date ranges found in resume');
+                console.log('   💡 Make sure resume contains date ranges like "2021-2022" or "2022-Present"');
+            } else {
+                foundRanges.forEach((range, index) => {
+                    console.log(`   ${index + 1}. ${range.text}`);
+                    console.log(`      → ${range.startYear} to ${range.endYear === currentYear ? 'Present' : range.endYear}`);
+                    console.log(`      → ${range.years} years (${range.months} months)`);
+                });
+                console.log('   ─────────────────────────────────────────────');
+                console.log(`   ✅ TOTAL EXPERIENCE: ${totalYears} years (${totalMonths} months)`);
+            }
+            
+            console.log('📊 ═══════════════════════════════════════════════\n');
             
             return totalYears > 0 ? totalYears : 0;
             
@@ -403,6 +543,25 @@ if (typeof window.filloraInitialized === 'undefined') {
             return db.phone || resume.phone || '';
         }
         
+        // Address fields - CRITICAL FIX!
+        if (context.includes('address') || context.includes('street') || context.includes('location')) {
+            // Try multiple address field names
+            const fullAddress = db.address || resume.address || 
+                               db.fullAddress || resume.fullAddress ||
+                               db.streetAddress || resume.streetAddress || '';
+            
+            if (fullAddress) return fullAddress;
+            
+            // If no full address, build from components
+            const city = db.city || resume.city || '';
+            const state = db.state || resume.state || '';
+            const country = db.country || resume.country || '';
+            
+            if (city || state || country) {
+                return [city, state, country].filter(x => x).join(', ');
+            }
+        }
+        
         // Location fields
         if (context.includes('city')) {
             return db.city || resume.city || '';
@@ -413,8 +572,8 @@ if (typeof window.filloraInitialized === 'undefined') {
         if (context.includes('country')) {
             return db.country || resume.country || 'India';
         }
-        if (context.includes('zip') || context.includes('postal')) {
-            return db.zipCode || resume.zipCode || '';
+        if (context.includes('zip') || context.includes('postal') || context.includes('pincode')) {
+            return db.zipCode || resume.zipCode || db.pincode || resume.pincode || '';
         }
         
         // Work fields
@@ -1284,10 +1443,59 @@ if (typeof window.filloraInitialized === 'undefined') {
             const fields = getModalFormFields();
             console.log(`      Found ${fields.length} fields`);
             
+            // FIRST PASS
+            let filled = 0;
             for (const field of fields) {
                 if (!isFieldAlreadyFilled(field)) {
-                    await fillFieldIntelligently(field);
+                    if (await fillFieldIntelligently(field)) {
+                        filled++;
+                    }
                     await delay(contentState.config.DELAYS.AFTER_FIELD_FILL);
+                }
+            }
+            console.log(`      ✅ First pass: ${filled} fields filled`);
+            
+            // SECOND PASS - Check for missed fields
+            await delay(500);
+            const fieldsAfter = getModalFormFields();
+            const emptyFields = fieldsAfter.filter(f => !isFieldAlreadyFilled(f));
+            
+            if (emptyFields.length > 0) {
+                console.log(`      ⚠️ ${emptyFields.length} fields still empty, retrying...`);
+                let secondFilled = 0;
+                
+                for (const field of emptyFields) {
+                    const fieldInfo = getFieldInformation(field);
+                    
+                    // Try harder with AI if available
+                    let value = getExactMatchValue(fieldInfo);
+                    if (!value && contentState.openaiKey) {
+                        value = await getAIPoweredValue(fieldInfo);
+                    }
+                    if (!value) {
+                        value = makeIntelligentGuess(fieldInfo);
+                    }
+                    
+                    if (value) {
+                        if (field.tagName.toLowerCase() === 'select') {
+                            if (await fillDropdownIntelligently(field, fieldInfo)) secondFilled++;
+                        } else if (field.type === 'file') {
+                            if (await uploadResumeFile(field)) secondFilled++;
+                        } else if (field.type === 'checkbox') {
+                            if (fillCheckboxField(field, fieldInfo)) secondFilled++;
+                        } else if (field.type === 'radio') {
+                            if (fillRadioField(field, fieldInfo)) secondFilled++;
+                        } else if (value.toString().trim()) {
+                            field.value = value.toString().trim();
+                            triggerFieldEvents(field);
+                            secondFilled++;
+                        }
+                        await delay(contentState.config.DELAYS.AFTER_FIELD_FILL);
+                    }
+                }
+                
+                if (secondFilled > 0) {
+                    console.log(`      ✅ Second pass: ${secondFilled} additional fields filled`);
                 }
             }
             
