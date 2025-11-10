@@ -25,12 +25,12 @@ if (typeof window.filloraInitialized === 'undefined') {
             MAX_FORM_STEPS: 35,
             JOB_SEARCH_KEYWORD: 'Data Analyst',
             DELAYS: {
-                AFTER_JOB_CLICK: 2000,
-                AFTER_EASY_APPLY: 2500,
-                AFTER_FIELD_FILL: 300,
-                AFTER_NEXT: 1500,
-                AFTER_SUBMIT: 3000,
-                BETWEEN_JOBS: 2000,
+                AFTER_JOB_CLICK: 1800,
+                AFTER_EASY_APPLY: 2000,
+                AFTER_FIELD_FILL: 200,
+                AFTER_NEXT: 1200,
+                AFTER_SUBMIT: 2500,
+                BETWEEN_JOBS: 1500,
                 FILTER_CHECK: 3000
             }
         }
@@ -109,100 +109,56 @@ if (typeof window.filloraInitialized === 'undefined') {
             
             showDataPanel(contentState.databaseData, contentState.resumeData);
             
-            // ==================== FIRST PASS ====================
-            console.log('\n🔄 FIRST PASS: Filling all fields...');
+            // ==================== SEAMLESS SINGLE-PASS FILLING ====================
+            // Fill all fields in one go with NO VISIBLE PAUSE
+            console.log('\n🚀 FILLING ALL FIELDS IN ONE GO...');
             let fieldsFilled = 0;
+            
             for (const field of fields) {
-                if (await fillFieldIntelligently(field)) {
-                    fieldsFilled++;
-                    highlightField(field);
-                    await delay(contentState.config.DELAYS.AFTER_FIELD_FILL);
-                }
-            }
-            
-            console.log(`✅ First pass complete: ${fieldsFilled}/${fields.length} fields filled`);
-            
-            // ==================== SECOND PASS: Catch Missed Fields ====================
-            console.log('\n🔄 SECOND PASS: Checking for missed fields...');
-            await delay(500);
-            
-            const fieldsAfterFirstPass = getAllVisibleFields();
-            const emptyFields = fieldsAfterFirstPass.filter(f => !isFieldAlreadyFilled(f));
-            
-            if (emptyFields.length > 0) {
-                console.log(`⚠️ Found ${emptyFields.length} empty fields after first pass`);
-                console.log('🔧 Attempting to fill missed fields with enhanced logic...');
+                const alreadyFilled = isFieldAlreadyFilled(field);
                 
-                let secondPassFilled = 0;
-                for (const field of emptyFields) {
+                if (!alreadyFilled) {
                     const fieldInfo = getFieldInformation(field);
-                    console.log(`   🔍 Missed field: "${fieldInfo.label}" (${field.type || field.tagName})`);
-                    
-                    // Try harder to fill this field
                     let filled = false;
                     
-                    // Try exact match again
-                    let value = getExactMatchValue(fieldInfo);
-                    
-                    // If still no value, use AI (with more attempts)
-                    if (!value && contentState.openaiKey) {
-                        console.log(`      🤖 Using AI to fill "${fieldInfo.label}"`);
-                        value = await getAIPoweredValue(fieldInfo);
-                    }
-                    
-                    // If still empty, make intelligent guess
-                    if (!value) {
-                        value = makeIntelligentGuess(fieldInfo);
-                    }
-                    
-                    // Fill the field
-                    if (value && value.toString().trim()) {
-                        if (field.tagName.toLowerCase() === 'select') {
-                            filled = await fillDropdownIntelligently(field, fieldInfo);
-                        } else if (field.type === 'file') {
-                            filled = await uploadResumeFile(field);
-                        } else if (field.type === 'checkbox') {
-                            filled = fillCheckboxField(field, fieldInfo);
-                        } else if (field.type === 'radio') {
-                            filled = fillRadioField(field, fieldInfo);
-                        } else {
+                    // Try all methods in sequence without stopping
+                    if (field.tagName.toLowerCase() === 'select') {
+                        filled = await fillDropdownIntelligently(field, fieldInfo);
+                    } else if (field.type === 'file') {
+                        filled = await uploadResumeFile(field);
+                    } else if (field.type === 'checkbox') {
+                        filled = fillCheckboxField(field, fieldInfo);
+                    } else if (field.type === 'radio') {
+                        filled = fillRadioField(field, fieldInfo);
+                    } else {
+                        // Text field - try harder if first attempt fails
+                        let value = getExactMatchValue(fieldInfo);
+                        
+                        // If no value, try AI immediately (no pause)
+                        if (!value && contentState.openaiKey) {
+                            value = await getAIPoweredValue(fieldInfo);
+                        }
+                        
+                        // If still no value, make guess immediately
+                        if (!value) {
+                            value = makeIntelligentGuess(fieldInfo);
+                        }
+                        
+                        if (value && value.toString().trim()) {
                             field.value = value.toString().trim();
                             triggerFieldEvents(field);
                             filled = true;
                         }
-                        
-                        if (filled) {
-                            secondPassFilled++;
-                            highlightField(field);
-                            console.log(`      ✅ Filled in second pass: "${value}"`);
-                            await delay(contentState.config.DELAYS.AFTER_FIELD_FILL);
-                        }
-                    } else {
-                        console.log(`      ⚠️ Could not determine value for "${fieldInfo.label}"`);
                     }
+                    
+                    if (filled) {
+                        fieldsFilled++;
+                        highlightField(field);
+                    }
+                    
+                    // Short delay for smooth UX (no pause)
+                    await delay(200);
                 }
-                
-                fieldsFilled += secondPassFilled;
-                console.log(`✅ Second pass complete: ${secondPassFilled} additional fields filled`);
-            } else {
-                console.log('✅ No empty fields found - all fields filled in first pass!');
-            }
-            
-            // ==================== FINAL VERIFICATION ====================
-            console.log('\n🔍 FINAL VERIFICATION: Checking all fields...');
-            await delay(300);
-            
-            const finalFields = getAllVisibleFields();
-            const stillEmpty = finalFields.filter(f => !isFieldAlreadyFilled(f));
-            
-            if (stillEmpty.length > 0) {
-                console.log(`⚠️ ${stillEmpty.length} fields still empty after two passes:`);
-                stillEmpty.forEach(f => {
-                    const info = getFieldInformation(f);
-                    console.log(`   • "${info.label}" (${f.type || f.tagName})`);
-                });
-            } else {
-                console.log('✅ Perfect! All fields filled successfully!');
             }
             
             const successRate = fields.length > 0 ? Math.round((fieldsFilled / fields.length) * 100) : 0;
@@ -1221,7 +1177,7 @@ if (typeof window.filloraInitialized === 'undefined') {
 
     async function processAllJobs() {
         let consecutiveErrors = 0;
-        const maxErrors = 5;
+        const maxErrors = 3;
         
         while (contentState.stats.applicationsSubmitted < contentState.config.MAX_JOBS && 
                consecutiveErrors < maxErrors) {
@@ -1230,48 +1186,63 @@ if (typeof window.filloraInitialized === 'undefined') {
                 const jobCards = getJobCards();
                 
                 if (jobCards.length === 0) {
-                    console.log('⚠️ No more job cards found');
-                    break;
+                    console.log('⚠️ No job cards found, refreshing...');
+                    location.reload();
+                    await delay(5000);
+                    continue;
                 }
                 
                 if (contentState.currentJobIndex >= jobCards.length) {
-                    console.log('⚠️ Reached end of job list');
-                    break;
+                    console.log('📜 Scrolling for more jobs...');
+                    window.scrollTo(0, document.body.scrollHeight);
+                    await delay(3000);
+                    contentState.currentJobIndex = 0;
+                    continue;
                 }
                 
                 const currentCard = jobCards[contentState.currentJobIndex];
                 const jobId = currentCard.getAttribute('data-occludable-job-id') || 
                              currentCard.getAttribute('data-job-id') || 
-                             contentState.currentJobIndex.toString();
+                             `job-${contentState.currentJobIndex}`;
                 
-                console.log(`\n🎯 Processing Job ${contentState.currentJobIndex + 1}/${jobCards.length} (ID: ${jobId})`);
+                console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+                console.log(`🎯 JOB ${contentState.currentJobIndex + 1}/${jobCards.length} (ID: ${jobId})`);
+                console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
                 
                 const result = await processSingleJob(currentCard, jobId);
                 
                 if (result.submitted) {
                     contentState.stats.applicationsSubmitted++;
                     consecutiveErrors = 0;
-                    console.log(`✅ Application submitted! Total: ${contentState.stats.applicationsSubmitted}`);
-                    showNotification(`✅ Application #${contentState.stats.applicationsSubmitted} submitted!`, 'success', 2000);
+                    console.log(`✅ SUCCESS! Application #${contentState.stats.applicationsSubmitted} submitted!`);
+                    showNotification(`✅ Application #${contentState.stats.applicationsSubmitted}`, 'success', 2000);
                 } else {
                     contentState.stats.jobsSkipped++;
-                    console.log(`⏭️ Job skipped: ${result.reason}`);
+                    console.log(`⏭️  SKIPPED: ${result.reason}`);
                 }
                 
                 contentState.currentJobIndex++;
                 await delay(contentState.config.DELAYS.BETWEEN_JOBS);
                 
             } catch (error) {
-                console.error('❌ Error processing job:', error);
+                console.error('❌ Job processing error:', error.message);
                 consecutiveErrors++;
                 contentState.currentJobIndex++;
+                
+                if (consecutiveErrors >= maxErrors) {
+                    console.error(`❌ STOPPING: ${maxErrors} consecutive errors`);
+                    break;
+                }
+                
                 await delay(2000);
             }
         }
         
-        if (consecutiveErrors >= maxErrors) {
-            console.error(`❌ Stopped after ${maxErrors} consecutive errors`);
-        }
+        console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        console.log(`🏁 AUTOMATION COMPLETE`);
+        console.log(`✅ Applications Submitted: ${contentState.stats.applicationsSubmitted}`);
+        console.log(`⏭️  Jobs Skipped: ${contentState.stats.jobsSkipped}`);
+        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
     }
 
     function getJobCards() {
@@ -1279,7 +1250,8 @@ if (typeof window.filloraInitialized === 'undefined') {
             '.jobs-search-results__list-item',
             '.scaffold-layout__list-item',
             'li.jobs-search-results__list-item',
-            'li[data-occludable-job-id]'
+            'li[data-occludable-job-id]',
+            '.job-card-container'
         ];
         
         for (const selector of selectors) {
@@ -1287,12 +1259,12 @@ if (typeof window.filloraInitialized === 'undefined') {
                 .filter(card => isElementVisible(card));
             
             if (cards.length > 0) {
-                console.log(`✅ Found ${cards.length} job cards using selector: ${selector}`);
+                console.log(`✅ Found ${cards.length} job cards`);
                 return cards;
             }
         }
         
-        console.log('⚠️ No job cards found');
+        console.warn('⚠️ No job cards found with any selector');
         return [];
     }
 
@@ -1302,90 +1274,79 @@ if (typeof window.filloraInitialized === 'undefined') {
             return { submitted: false, skipped: true, reason: 'Already processed' };
         }
         
-        // Click on job card
-        console.log('   🖱️  [1] Clicking job card...');
-        jobCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        await delay(500);
-        jobCard.click();
-        await delay(contentState.config.DELAYS.AFTER_JOB_CLICK);
-        
-        // Check if Easy Apply button exists
-        console.log('   🔍 [2] Checking for Easy Apply button...');
-        const hasEasyApply = await checkForEasyApplyButton();
-        
-        if (!hasEasyApply) {
-            console.log('   ⏭️  [2] No Easy Apply button - skipping');
-            contentState.processedJobs.add(jobId);
-            return { submitted: false, skipped: true, reason: 'No Easy Apply button' };
-        }
-        
-        console.log('   ✅ [2] Easy Apply button found!');
-        
-        // Click Easy Apply button
-        console.log('   🖱️  [3] Clicking Easy Apply button...');
-        const modalOpened = await clickEasyApplyButton();
-        
-        if (!modalOpened) {
-            console.log('   ❌ [3] Failed to open Easy Apply modal');
-            contentState.processedJobs.add(jobId);
-            return { submitted: false, skipped: true, reason: 'Modal failed to open' };
-        }
-        
-        console.log('   ✅ [3] Easy Apply modal opened!');
-        await delay(contentState.config.DELAYS.AFTER_EASY_APPLY);
-        
-        // Fill and submit application form
-        console.log('   📝 [4] Filling application form...');
-        const submitted = await fillAndSubmitApplicationForm();
-        
-        if (submitted) {
-            console.log('   ✅ [4] Application SUBMITTED successfully!');
-            contentState.processedJobs.add(jobId);
-            return { submitted: true };
-        } else {
-            console.log('   ❌ [4] Failed to submit application');
-            await closeEasyApplyModal();
-            contentState.processedJobs.add(jobId);
-            return { submitted: false, skipped: true, reason: 'Submission failed' };
-        }
-    }
-
-    async function checkForEasyApplyButton() {
-        await delay(1500); // Wait for job details to load
-        
-        const buttonSelectors = [
-            'button.jobs-apply-button',
-            'button[aria-label*="Easy Apply"]',
-            'button.jobs-apply-button--top-card',
-            '.jobs-apply-button'
-        ];
-        
-        for (const selector of buttonSelectors) {
-            const buttons = document.querySelectorAll(selector);
+        try {
+            // ========== STEP 1: CLICK JOB CARD ==========
+            console.log('   [1/5] 🖱️  Clicking job card...');
+            jobCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            await delay(800);
             
-            for (const button of buttons) {
-                if (isElementVisible(button)) {
-                    const buttonText = button.textContent.toLowerCase();
-                    const ariaLabel = (button.getAttribute('aria-label') || '').toLowerCase();
-                    
-                    if (buttonText.includes('easy apply') || ariaLabel.includes('easy apply')) {
-                        return true;
-                    }
-                }
+            // Try multiple click methods
+            try {
+                jobCard.click();
+            } catch {
+                jobCard.dispatchEvent(new MouseEvent('click', { bubbles: true }));
             }
+            
+            await delay(contentState.config.DELAYS.AFTER_JOB_CLICK);
+            console.log('   [1/5] ✅ Job card clicked');
+            
+            // ========== STEP 2: CHECK EASY APPLY ==========
+            console.log('   [2/5] 🔍 Checking for Easy Apply...');
+            const hasEasyApply = await waitForEasyApplyButton();
+            
+            if (!hasEasyApply) {
+                console.log('   [2/5] ⏭️  No Easy Apply button found');
+                contentState.processedJobs.add(jobId);
+                return { submitted: false, skipped: true, reason: 'No Easy Apply button' };
+            }
+            
+            console.log('   [2/5] ✅ Easy Apply button found!');
+            
+            // ========== STEP 3: CLICK EASY APPLY ==========
+            console.log('   [3/5] 🖱️  Clicking Easy Apply...');
+            const modalOpened = await clickEasyApplyButtonRobust();
+            
+            if (!modalOpened) {
+                console.log('   [3/5] ❌ Failed to open modal');
+                contentState.processedJobs.add(jobId);
+                return { submitted: false, skipped: true, reason: 'Modal failed to open' };
+            }
+            
+            console.log('   [3/5] ✅ Modal opened!');
+            await delay(contentState.config.DELAYS.AFTER_EASY_APPLY);
+            
+            // ========== STEP 4: FILL FORM ==========
+            console.log('   [4/5] 📝 Filling application form...');
+            const submitted = await fillAndSubmitFormRobust();
+            
+            if (submitted) {
+                console.log('   [4/5] ✅ Form filled and submitted!');
+                contentState.processedJobs.add(jobId);
+                return { submitted: true };
+            } else {
+                console.log('   [4/5] ❌ Failed to submit');
+                await closeEasyApplyModal();
+                contentState.processedJobs.add(jobId);
+                return { submitted: false, skipped: true, reason: 'Submission failed' };
+            }
+            
+        } catch (error) {
+            console.error('   ❌ Error processing job:', error.message);
+            contentState.processedJobs.add(jobId);
+            return { submitted: false, skipped: true, reason: error.message };
         }
-        
-        return false;
     }
 
-    async function clickEasyApplyButton() {
-        const maxAttempts = 10;
+    async function waitForEasyApplyButton(maxWait = 5000) {
+        const startTime = Date.now();
         
-        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        while (Date.now() - startTime < maxWait) {
             const buttonSelectors = [
                 'button.jobs-apply-button',
                 'button[aria-label*="Easy Apply"]',
-                'button.jobs-apply-button--top-card'
+                'button[aria-label*="easy apply"]',
+                '.jobs-apply-button',
+                'button.artdeco-button--primary'
             ];
             
             for (const selector of buttonSelectors) {
@@ -1397,11 +1358,55 @@ if (typeof window.filloraInitialized === 'undefined') {
                         const ariaLabel = (button.getAttribute('aria-label') || '').toLowerCase();
                         
                         if (buttonText.includes('easy apply') || ariaLabel.includes('easy apply')) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            
+            await delay(300);
+        }
+        
+        return false;
+    }
+
+    async function clickEasyApplyButtonRobust() {
+        const maxAttempts = 15;
+        
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const buttonSelectors = [
+                'button.jobs-apply-button',
+                'button[aria-label*="Easy Apply"]',
+                '.jobs-apply-button'
+            ];
+            
+            for (const selector of buttonSelectors) {
+                const buttons = document.querySelectorAll(selector);
+                
+                for (const button of buttons) {
+                    if (isElementVisible(button)) {
+                        const buttonText = button.textContent.toLowerCase();
+                        const ariaLabel = (button.getAttribute('aria-label') || '').toLowerCase();
+                        
+                        if (buttonText.includes('easy apply') || ariaLabel.includes('easy apply')) {
+                            // Scroll button into view
                             button.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            await delay(300);
-                            button.click();
+                            await delay(500);
+                            
+                            // Try multiple click methods
+                            try {
+                                button.click();
+                            } catch {
+                                try {
+                                    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                                } catch {
+                                    console.log('      ⚠️ Both click methods failed');
+                                }
+                            }
+                            
                             await delay(2000);
                             
+                            // Check if modal opened
                             if (isEasyApplyModalOpen()) {
                                 return true;
                             }
@@ -1420,8 +1425,8 @@ if (typeof window.filloraInitialized === 'undefined') {
         const modalSelectors = [
             '.jobs-easy-apply-modal',
             '.jobs-easy-apply-content',
-            'div[role="dialog"]',
-            '.artdeco-modal'
+            'div[role="dialog"][aria-label*="Easy Apply"]',
+            '.artdeco-modal[aria-labelledby*="jobs-easy-apply"]'
         ];
         
         for (const selector of modalSelectors) {
@@ -1434,84 +1439,61 @@ if (typeof window.filloraInitialized === 'undefined') {
         return false;
     }
 
-    async function fillAndSubmitApplicationForm() {
+    async function fillAndSubmitFormRobust() {
         for (let step = 0; step < contentState.config.MAX_FORM_STEPS; step++) {
-            console.log(`      Step ${step + 1}/${contentState.config.MAX_FORM_STEPS}`);
+            console.log(`      📄 Step ${step + 1}/${contentState.config.MAX_FORM_STEPS}`);
             await delay(1000);
             
-            // Fill all visible fields in current step
+            // Fill all fields
             const fields = getModalFormFields();
-            console.log(`      Found ${fields.length} fields`);
+            console.log(`         Found ${fields.length} fields`);
             
-            // FIRST PASS
-            let filled = 0;
-            for (const field of fields) {
-                if (!isFieldAlreadyFilled(field)) {
-                    if (await fillFieldIntelligently(field)) {
-                        filled++;
-                    }
-                    await delay(contentState.config.DELAYS.AFTER_FIELD_FILL);
-                }
-            }
-            console.log(`      ✅ First pass: ${filled} fields filled`);
-            
-            // SECOND PASS - Check for missed fields
-            await delay(500);
-            const fieldsAfter = getModalFormFields();
-            const emptyFields = fieldsAfter.filter(f => !isFieldAlreadyFilled(f));
-            
-            if (emptyFields.length > 0) {
-                console.log(`      ⚠️ ${emptyFields.length} fields still empty, retrying...`);
-                let secondFilled = 0;
-                
-                for (const field of emptyFields) {
-                    const fieldInfo = getFieldInformation(field);
-                    
-                    // Try harder with AI if available
-                    let value = getExactMatchValue(fieldInfo);
-                    if (!value && contentState.openaiKey) {
-                        value = await getAIPoweredValue(fieldInfo);
-                    }
-                    if (!value) {
-                        value = makeIntelligentGuess(fieldInfo);
-                    }
-                    
-                    if (value) {
+            if (fields.length > 0) {
+                for (const field of fields) {
+                    if (!isFieldAlreadyFilled(field)) {
+                        const fieldInfo = getFieldInformation(field);
+                        
+                        // Try to fill with all available data
+                        let value = getExactMatchValue(fieldInfo);
+                        if (!value && contentState.openaiKey) {
+                            value = await getAIPoweredValue(fieldInfo);
+                        }
+                        if (!value) {
+                            value = makeIntelligentGuess(fieldInfo);
+                        }
+                        
+                        // Fill the field
                         if (field.tagName.toLowerCase() === 'select') {
-                            if (await fillDropdownIntelligently(field, fieldInfo)) secondFilled++;
+                            await fillDropdownIntelligently(field, fieldInfo);
                         } else if (field.type === 'file') {
-                            if (await uploadResumeFile(field)) secondFilled++;
+                            await uploadResumeFile(field);
                         } else if (field.type === 'checkbox') {
-                            if (fillCheckboxField(field, fieldInfo)) secondFilled++;
+                            fillCheckboxField(field, fieldInfo);
                         } else if (field.type === 'radio') {
-                            if (fillRadioField(field, fieldInfo)) secondFilled++;
-                        } else if (value.toString().trim()) {
+                            fillRadioField(field, fieldInfo);
+                        } else if (value && value.toString().trim()) {
                             field.value = value.toString().trim();
                             triggerFieldEvents(field);
-                            secondFilled++;
                         }
-                        await delay(contentState.config.DELAYS.AFTER_FIELD_FILL);
+                        
+                        await delay(150);
                     }
-                }
-                
-                if (secondFilled > 0) {
-                    console.log(`      ✅ Second pass: ${secondFilled} additional fields filled`);
                 }
             }
             
             await delay(800);
             
-            // Check if application is complete
+            // Check if complete
             if (isApplicationComplete()) {
-                console.log('      ✅ Application complete!');
+                console.log('         ✅ Application complete!');
                 await delay(2000);
                 await closeEasyApplyModal();
                 return true;
             }
             
-            // Try to click Submit button
+            // Try submit
             if (await clickModalButton('submit')) {
-                console.log('      🔵 Clicked Submit button');
+                console.log('         🔵 Submit clicked');
                 await delay(contentState.config.DELAYS.AFTER_SUBMIT);
                 
                 if (isApplicationComplete()) {
@@ -1521,13 +1503,12 @@ if (typeof window.filloraInitialized === 'undefined') {
                 }
             }
             
-            // Try to click Next button
+            // Try next
             if (await clickModalButton('next')) {
-                console.log('      🔵 Clicked Next button');
+                console.log('         🔵 Next clicked');
                 await delay(contentState.config.DELAYS.AFTER_NEXT);
             } else if (step > 0) {
-                // No Next button found and we're past first step - might be stuck
-                console.log('      ⚠️ No Next button found');
+                console.log('         ⚠️ No Next button - might be stuck');
                 break;
             }
         }
