@@ -137,6 +137,8 @@ if (typeof window.filloraInitialized === 'undefined') {
     }
 
     async function loadAllUserData(userId) {
+        console.log('📥 Loading user data for userId:', userId);
+        
         // Load database data
         const dbResponse = await chrome.runtime.sendMessage({
             action: 'FETCH_ALL_DATABASE_TABLES',
@@ -146,6 +148,9 @@ if (typeof window.filloraInitialized === 'undefined') {
         if (dbResponse?.success && dbResponse.data) {
             contentState.databaseData = dbResponse.data;
             console.log('✅ Database loaded:', Object.keys(dbResponse.data).length, 'fields');
+            console.log('🗄️ Database data:', dbResponse.data);
+        } else {
+            console.warn('⚠️ No database data loaded');
         }
         
         // Load resume data
@@ -157,139 +162,129 @@ if (typeof window.filloraInitialized === 'undefined') {
         if (resumeResponse?.success && resumeResponse.data) {
             contentState.resumeData = resumeResponse.data;
             console.log('✅ Resume loaded:', Object.keys(resumeResponse.data).length, 'fields');
+            console.log('📄 Resume data:', resumeResponse.data);
             
             // Calculate total experience from date ranges if not already present
+            console.log('\n🔍 Checking experience in resume data...');
+            console.log('   resume.totalExperience:', resumeResponse.data.totalExperience);
+            console.log('   resume.experience:', resumeResponse.data.experience);
+            console.log('   resume.workExperience:', resumeResponse.data.workExperience);
+            
             if (!contentState.resumeData.totalExperience || contentState.resumeData.totalExperience === 0) {
+                console.log('\n🧮 No totalExperience found, calculating from resume...');
                 contentState.resumeData.totalExperience = calculateTotalExperience(resumeResponse.data);
-                console.log(`🧮 Calculated total experience: ${contentState.resumeData.totalExperience} years`);
+                console.log(`✅ Calculated and set totalExperience: ${contentState.resumeData.totalExperience} years\n`);
+            } else {
+                console.log(`ℹ️ totalExperience already present: ${contentState.resumeData.totalExperience} years`);
             }
+        } else {
+            console.warn('⚠️ No resume data loaded');
         }
+        
+        console.log('\n📊 FINAL DATA STATE:');
+        console.log('   Database fields:', Object.keys(contentState.databaseData || {}).length);
+        console.log('   Resume fields:', Object.keys(contentState.resumeData || {}).length);
+        console.log('   Total Experience:', contentState.resumeData?.totalExperience || contentState.databaseData?.totalExperience || 0, 'years');
+        console.log('');
     }
 
-    // ==================== SMART EXPERIENCE CALCULATION ====================
+    // ==================== SMART EXPERIENCE CALCULATION (FIXED!) ====================
     function calculateTotalExperience(resumeData) {
-        let totalYears = 0;
-        
         try {
-            // Convert resume data to string for pattern matching
-            const resumeText = JSON.stringify(resumeData).toLowerCase();
-            
             console.log('🧮 Calculating total experience from resume...');
+            console.log('📄 Resume data:', resumeData);
+            
+            // Convert resume data to string for pattern matching
+            const resumeText = JSON.stringify(resumeData);
             
             const currentYear = new Date().getFullYear();
-            const processedRanges = new Set();
+            const currentMonth = new Date().getMonth() + 1; // 1-12
             
-            // Pattern 1: "2021 - 2022" or "2021-2022" or "2021 – 2022"
-            const pattern1 = /(\d{4})\s*[-–—]\s*(\d{4}|present|current)/gi;
-            const matches1 = resumeText.matchAll(pattern1);
+            let totalMonths = 0;
+            const foundRanges = [];
             
-            for (const match of matches1) {
+            // Find all 4-digit years in the text
+            const allYears = resumeText.match(/\b(19|20)\d{2}\b/g);
+            console.log('📅 Found years in resume:', allYears);
+            
+            // Pattern: Extract date ranges like "2021 - 2022" or "2021-2022" or "2022 – Present"
+            // This pattern handles: 2021-2022, 2021 - 2022, 2021 – 2022, 2022-Present, 2022 - Present
+            const rangePattern = /\b(19|20)\d{2}\s*[-–—]\s*((19|20)\d{2}|present|current)\b/gi;
+            const matches = resumeText.matchAll(rangePattern);
+            
+            for (const match of matches) {
                 const fullMatch = match[0];
+                console.log('   🔍 Found range:', fullMatch);
                 
-                // Skip if already processed
-                const normalizedMatch = fullMatch.replace(/\s+/g, '').toLowerCase();
-                if (processedRanges.has(normalizedMatch)) continue;
-                processedRanges.add(normalizedMatch);
+                // Extract start year (first 4 digits)
+                const startYearMatch = fullMatch.match(/\b(19|20)\d{2}\b/);
+                if (!startYearMatch) continue;
+                const startYear = parseInt(startYearMatch[0]);
                 
-                // Extract start year
-                const startYear = parseInt(match[1]);
+                // Extract end year (second 4 digits or "present"/"current")
+                const parts = fullMatch.split(/[-–—]/);
+                const endPart = parts[1].trim().toLowerCase();
                 
-                // Extract end year
-                let endYear = currentYear;
-                const endText = match[2].toLowerCase();
+                let endYear, endMonth;
                 
-                if (endText === 'present' || endText === 'current') {
+                if (endPart.includes('present') || endPart.includes('current')) {
                     endYear = currentYear;
+                    endMonth = currentMonth;
+                    console.log(`      Start: ${startYear}, End: Present (${currentYear})`);
                 } else {
-                    endYear = parseInt(endText);
+                    const endYearMatch = endPart.match(/\b(19|20)\d{2}\b/);
+                    if (endYearMatch) {
+                        endYear = parseInt(endYearMatch[0]);
+                        endMonth = 12; // Assume end of year if no month specified
+                        console.log(`      Start: ${startYear}, End: ${endYear}`);
+                    } else {
+                        continue;
+                    }
                 }
                 
                 // Validate years
-                if (startYear >= 1990 && startYear <= currentYear && 
-                    endYear >= startYear && endYear <= currentYear) {
-                    
-                    const yearsInRole = endYear - startYear;
-                    totalYears += yearsInRole;
-                    
-                    console.log(`   📅 ${startYear} - ${endYear === currentYear ? 'Present' : endYear}: ${yearsInRole} year${yearsInRole !== 1 ? 's' : ''}`);
+                if (startYear < 1990 || startYear > currentYear) {
+                    console.log(`      ❌ Invalid start year: ${startYear}`);
+                    continue;
+                }
+                if (endYear < startYear || endYear > currentYear) {
+                    console.log(`      ❌ Invalid end year: ${endYear}`);
+                    continue;
+                }
+                
+                // Calculate months (assuming start of start year to end of end year)
+                const startMonth = 1; // Assume start of year if no month specified
+                const monthsInRange = (endYear - startYear) * 12 + (endMonth - startMonth);
+                
+                if (monthsInRange > 0) {
+                    totalMonths += monthsInRange;
+                    const yearsInRange = Math.round(monthsInRange / 12 * 10) / 10;
+                    foundRanges.push({
+                        range: fullMatch,
+                        startYear,
+                        endYear,
+                        months: monthsInRange,
+                        years: yearsInRange
+                    });
+                    console.log(`      ✅ ${startYear} to ${endYear === currentYear ? 'Present' : endYear} = ${yearsInRange} years (${monthsInRange} months)`);
                 }
             }
             
-            // Pattern 2: "July 2021 - March 2023" or "20 July 2021 - 15 March 2023"
-            const pattern2 = /(\d{1,2}\s+)?([a-z]+\s+)?(\d{4})\s*[-–—]\s*(\d{1,2}\s+)?([a-z]+\s+)?(\d{4}|present|current)/gi;
-            const matches2 = resumeText.matchAll(pattern2);
+            const totalYears = Math.round(totalMonths / 12 * 10) / 10;
             
-            for (const match of matches2) {
-                const fullMatch = match[0];
-                
-                // Skip if already processed
-                const normalizedMatch = fullMatch.replace(/\s+/g, '').toLowerCase();
-                if (processedRanges.has(normalizedMatch)) continue;
-                processedRanges.add(normalizedMatch);
-                
-                // Extract start year
-                const startYear = parseInt(match[3]);
-                
-                // Extract end year
-                let endYear = currentYear;
-                const endText = match[6] ? match[6].toLowerCase() : '';
-                
-                if (endText === 'present' || endText === 'current') {
-                    endYear = currentYear;
-                } else if (match[6] && /\d{4}/.test(match[6])) {
-                    endYear = parseInt(match[6]);
-                }
-                
-                // Validate years
-                if (startYear >= 1990 && startYear <= currentYear && 
-                    endYear >= startYear && endYear <= currentYear) {
-                    
-                    // Calculate years (with months for more accuracy)
-                    const startMonth = getMonthNumber(match[2]) || 1;
-                    const endMonth = endText === 'present' || endText === 'current' ? new Date().getMonth() + 1 : getMonthNumber(match[5]) || 12;
-                    
-                    const totalMonths = (endYear - startYear) * 12 + (endMonth - startMonth);
-                    const yearsInRole = Math.round(totalMonths / 12 * 10) / 10;
-                    
-                    totalYears += yearsInRole;
-                    
-                    console.log(`   📅 ${fullMatch.trim()}: ${yearsInRole} year${yearsInRole !== 1 ? 's' : ''}`);
-                }
-            }
-            
-            // Round to 1 decimal place
-            totalYears = Math.round(totalYears * 10) / 10;
-            
-            console.log(`   ✅ TOTAL EXPERIENCE: ${totalYears} years`);
+            console.log('\n📊 Experience Calculation Summary:');
+            foundRanges.forEach(r => {
+                console.log(`   • ${r.range} = ${r.years} years`);
+            });
+            console.log(`   ✅ TOTAL EXPERIENCE: ${totalYears} years (${totalMonths} months)\n`);
             
             return totalYears > 0 ? totalYears : 0;
             
         } catch (error) {
             console.error('❌ Experience calculation error:', error);
+            console.error('Stack:', error.stack);
             return 0;
         }
-    }
-    
-    function getMonthNumber(monthText) {
-        if (!monthText) return null;
-        
-        const months = {
-            'jan': 1, 'january': 1,
-            'feb': 2, 'february': 2,
-            'mar': 3, 'march': 3,
-            'apr': 4, 'april': 4,
-            'may': 5,
-            'jun': 6, 'june': 6,
-            'jul': 7, 'july': 7,
-            'aug': 8, 'august': 8,
-            'sep': 9, 'sept': 9, 'september': 9,
-            'oct': 10, 'october': 10,
-            'nov': 11, 'november': 11,
-            'dec': 12, 'december': 12
-        };
-        
-        const cleaned = monthText.toLowerCase().trim();
-        return months[cleaned] || null;
     }
 
     // ==================== INTELLIGENT FIELD FILLING ====================
@@ -1502,43 +1497,160 @@ if (typeof window.filloraInitialized === 'undefined') {
             position: fixed;
             top: 80px;
             right: 20px;
-            width: 300px;
+            width: 380px;
+            max-height: 600px;
+            overflow-y: auto;
             background: white;
             border: 2px solid #3B82F6;
             border-radius: 10px;
-            padding: 12px;
+            padding: 14px;
             z-index: 999999;
             box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-            font-size: 12px;
+            font-size: 11px;
             font-family: Arial, sans-serif;
+            line-height: 1.6;
         `;
         
-        const totalExp = resumeData?.totalExperience || databaseData?.totalExperience || 0;
+        const db = databaseData || {};
+        const resume = resumeData || {};
         
-        panel.innerHTML = `
-            <div style="font-weight: 700; color: #3B82F6; margin-bottom: 8px;">📊 Data Loaded</div>
-            <div>Database: ${Object.keys(databaseData || {}).length} fields</div>
-            <div>Resume: ${Object.keys(resumeData || {}).length} fields</div>
-            <div style="margin-top: 8px;"><strong>Total Experience: ${totalExp} years</strong></div>
+        // Get final merged data
+        const fullName = db.fullName || resume.fullName || db.name || resume.name || 'N/A';
+        const email = db.email || resume.email || 'N/A';
+        const phone = db.phone || resume.phone || 'N/A';
+        const currentTitle = db.currentTitle || resume.currentTitle || db.jobTitle || resume.jobTitle || 'N/A';
+        const currentCompany = db.currentCompany || resume.currentCompany || 'N/A';
+        const city = db.city || resume.city || 'N/A';
+        const totalExp = resume.totalExperience || db.totalExperience || 0;
+        const education = db.education || resume.education || db.degree || resume.degree || 'N/A';
+        
+        // Build HTML with RAW data from both sources
+        let html = `
+            <div style="font-weight: 700; color: #3B82F6; margin-bottom: 10px; font-size: 13px; display: flex; align-items: center; gap: 6px;">
+                <span>📊</span>
+                <span>Extracted Data from Sources</span>
+            </div>
+        `;
+        
+        // DATABASE DATA SECTION
+        html += `
+            <div style="background: #DBEAFE; padding: 10px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #3B82F6;">
+                <div style="font-weight: 700; color: #1E40AF; margin-bottom: 6px; font-size: 12px;">
+                    🗄️ DATABASE DATA (${Object.keys(db).length} fields)
+                </div>
+                <div style="font-size: 10px; color: #1E3A8A; line-height: 1.5;">
+        `;
+        
+        if (Object.keys(db).length > 0) {
+            // Show top 15 database fields
+            const dbEntries = Object.entries(db).slice(0, 15);
+            dbEntries.forEach(([key, value]) => {
+                const displayValue = value && value.toString().length > 50 ? 
+                    value.toString().substring(0, 50) + '...' : value;
+                html += `<div><strong>${key}:</strong> ${displayValue || 'N/A'}</div>`;
+            });
+            if (Object.keys(db).length > 15) {
+                html += `<div style="color: #64748B; font-style: italic;">... and ${Object.keys(db).length - 15} more fields</div>`;
+            }
+        } else {
+            html += `<div style="color: #64748B; font-style: italic;">No database data found</div>`;
+        }
+        
+        html += `
+                </div>
+            </div>
+        `;
+        
+        // RESUME DATA SECTION
+        html += `
+            <div style="background: #FEF3C7; padding: 10px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #F59E0B;">
+                <div style="font-weight: 700; color: #92400E; margin-bottom: 6px; font-size: 12px;">
+                    📄 RESUME DATA (${Object.keys(resume).length} fields)
+                </div>
+                <div style="font-size: 10px; color: #78350F; line-height: 1.5;">
+        `;
+        
+        if (Object.keys(resume).length > 0) {
+            // Show top 15 resume fields
+            const resumeEntries = Object.entries(resume).slice(0, 15);
+            resumeEntries.forEach(([key, value]) => {
+                const displayValue = value && value.toString().length > 50 ? 
+                    value.toString().substring(0, 50) + '...' : value;
+                html += `<div><strong>${key}:</strong> ${displayValue || 'N/A'}</div>`;
+            });
+            if (Object.keys(resume).length > 15) {
+                html += `<div style="color: #64748B; font-style: italic;">... and ${Object.keys(resume).length - 15} more fields</div>`;
+            }
+        } else {
+            html += `<div style="color: #64748B; font-style: italic;">No resume data found</div>`;
+        }
+        
+        html += `
+                </div>
+            </div>
+        `;
+        
+        // EXPERIENCE CALCULATION SECTION
+        html += `
+            <div style="background: #DCFCE7; padding: 10px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #10B981;">
+                <div style="font-weight: 700; color: #065F46; margin-bottom: 6px; font-size: 12px;">
+                    🧮 EXPERIENCE CALCULATION
+                </div>
+                <div style="font-size: 10px; color: #064E3B; line-height: 1.5;">
+                    <div><strong>From Database:</strong> ${db.totalExperience || 'Not found'}</div>
+                    <div><strong>From Resume:</strong> ${resume.totalExperience || 'Calculated'} years</div>
+                    <div style="margin-top: 6px; padding: 6px; background: #FEF3C7; border-radius: 4px;">
+                        <div style="font-weight: 700; color: #92400E; font-size: 11px;">
+                            💼 FINAL EXPERIENCE: ${totalExp} years
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // MERGED FINAL DATA SECTION
+        html += `
+            <div style="background: #F1F5F9; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
+                <div style="font-weight: 700; color: #334155; margin-bottom: 6px; font-size: 12px;">
+                    ✅ FINAL MERGED DATA (Used for Autofill)
+                </div>
+                <div style="font-size: 10px; color: #475569; line-height: 1.5;">
+                    <div><strong>👤 Name:</strong> ${fullName}</div>
+                    <div><strong>💼 Title:</strong> ${currentTitle}</div>
+                    <div><strong>🏢 Company:</strong> ${currentCompany}</div>
+                    <div><strong>📧 Email:</strong> ${email}</div>
+                    <div><strong>📱 Phone:</strong> ${phone}</div>
+                    <div><strong>📍 Location:</strong> ${city}</div>
+                    <div><strong>🎓 Education:</strong> ${education}</div>
+                    <div><strong>💼 Experience:</strong> ${totalExp} years</div>
+                </div>
+            </div>
+        `;
+        
+        html += `
             <button onclick="this.parentElement.remove()" style="
-                margin-top: 8px;
-                padding: 4px 8px;
+                margin-top: 10px;
+                width: 100%;
+                padding: 8px 10px;
                 background: #EF4444;
                 color: white;
                 border: none;
-                border-radius: 5px;
+                border-radius: 6px;
                 cursor: pointer;
                 font-size: 11px;
-            ">Close</button>
+                font-weight: 600;
+            ">Close Panel</button>
         `;
         
+        panel.innerHTML = html;
         document.body.appendChild(panel);
         
+        // Auto-close after 45 seconds
         setTimeout(() => {
             if (panel.parentElement) {
                 panel.remove();
             }
-        }, 20000);
+        }, 45000);
     }
 
     function showNotification(message, type, duration) {
