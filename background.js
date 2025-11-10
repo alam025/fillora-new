@@ -224,11 +224,24 @@ async function handleLogin(email, password, sendResponse) {
     });
     
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error_description || 'Login failed');
+      let errorMessage = 'Login failed';
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error_description || errorData.msg || errorData.error || 'Login failed';
+      } catch (parseError) {
+        // If we can't parse the error response, use the status text
+        errorMessage = `Login failed: ${response.statusText}`;
+      }
+      throw new Error(errorMessage);
     }
     
     const data = await response.json();
+    
+    // Validate the response data structure
+    if (!data.user || !data.access_token) {
+      throw new Error('Invalid login response format');
+    }
+    
     const userData = {
       id: data.user.id,
       email: data.user.email,
@@ -257,8 +270,15 @@ async function handleLogin(email, password, sendResponse) {
     });
     
   } catch (error) {
-    console.error('❌ [LOGIN] Error:', error);
-    sendResponse({ success: false, error: error.message });
+    // Fixed: Properly handle error logging
+    console.error('❌ [LOGIN] Error:');
+    console.error(error);
+    
+    // Send only the error message string to the client
+    sendResponse({ 
+      success: false, 
+      error: error.message || 'Login failed'
+    });
   }
 }
 
