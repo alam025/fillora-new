@@ -1,8 +1,8 @@
-// Fillora Chrome Extension - FINAL FIXED POPUP
-// Fire-and-Forget LinkedIn Automation - NO MORE ERRORS!
-console.log('🚀 [FILLORA POPUP] Loading...');
+// Fillora Chrome Extension - FIXED POPUP
+// ✅ Button stays DISABLED until automation completes
+// ✅ No second click needed
+console.log('🚀 [FILLORA POPUP] Loading fixed version...');
 
-// ==================== STATE MANAGEMENT ====================
 let appState = {
     isAuthenticated: false,
     user: null,
@@ -18,7 +18,6 @@ let appState = {
     }
 };
 
-// ==================== ERROR & SUCCESS HANDLING ====================
 function showError(message, duration = 5000) {
     console.error('❌ [ERROR]', message);
     
@@ -30,7 +29,6 @@ function showError(message, duration = 5000) {
                          document.body;
         errorDiv = document.createElement('div');
         errorDiv.id = 'error-message';
-        errorDiv.className = 'error-message';
         errorDiv.style.cssText = `
             background: linear-gradient(135deg, #EF4444, #DC2626);
             color: white;
@@ -42,7 +40,6 @@ function showError(message, duration = 5000) {
             font-size: 13px;
             display: none;
             box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
-            animation: slideDown 0.3s ease-out;
         `;
         container.appendChild(errorDiv);
     }
@@ -51,12 +48,7 @@ function showError(message, duration = 5000) {
     errorDiv.style.display = 'block';
     
     setTimeout(() => {
-        if (errorDiv) {
-            errorDiv.style.animation = 'slideUp 0.3s ease-in';
-            setTimeout(() => {
-                errorDiv.style.display = 'none';
-            }, 300);
-        }
+        if (errorDiv) errorDiv.style.display = 'none';
     }, duration);
 }
 
@@ -66,12 +58,9 @@ function showSuccess(message, duration = 3000) {
     let successDiv = document.getElementById('success-message');
     
     if (!successDiv) {
-        const container = document.querySelector('.content') || 
-                         document.getElementById('dashboard-screen') || 
-                         document.body;
+        const container = document.querySelector('.content') || document.body;
         successDiv = document.createElement('div');
         successDiv.id = 'success-message';
-        successDiv.className = 'success-message';
         successDiv.style.cssText = `
             background: linear-gradient(135deg, #10B981, #059669);
             color: white;
@@ -83,7 +72,6 @@ function showSuccess(message, duration = 3000) {
             font-size: 13px;
             display: none;
             box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-            animation: slideDown 0.3s ease-out;
         `;
         container.appendChild(successDiv);
     }
@@ -92,12 +80,7 @@ function showSuccess(message, duration = 3000) {
     successDiv.style.display = 'block';
     
     setTimeout(() => {
-        if (successDiv) {
-            successDiv.style.animation = 'slideUp 0.3s ease-in';
-            setTimeout(() => {
-                successDiv.style.display = 'none';
-            }, 300);
-        }
+        if (successDiv) successDiv.style.display = 'none';
     }, duration);
 }
 
@@ -133,20 +116,14 @@ function showInfo(message, duration = 2000) {
     }, duration);
 }
 
-// ==================== AUTHENTICATION ====================
 async function handleAuth() {
-    console.log('🔐 [AUTH] Starting authentication...');
+    console.log('🔐 [AUTH] Starting...');
     
     const email = document.getElementById('email')?.value?.trim();
     const password = document.getElementById('password')?.value?.trim();
     
     if (!email || !password) {
-        showError('Please enter both email and password');
-        return;
-    }
-    
-    if (!validateEmail(email)) {
-        showError('Please enter a valid email address');
+        showError('Please enter email and password');
         return;
     }
     
@@ -169,18 +146,16 @@ async function handleAuth() {
             appState.isAuthenticated = true;
             appState.user = response.user;
             
-            console.log('✅ Authentication successful:', response.user.email);
             showSuccess('Welcome back, ' + (response.user.name || 'User') + '!');
             
             setTimeout(() => {
                 showDashboard();
             }, 500);
         } else {
-            throw new Error(response?.error || 'Authentication failed. Please check your credentials.');
+            throw new Error(response?.error || 'Authentication failed');
         }
     } catch (error) {
-        console.error('❌ Auth error:', error);
-        showError(error.message || 'Authentication failed. Please try again.');
+        showError(error.message || 'Login failed');
     } finally {
         if (loginBtn) {
             loginBtn.disabled = false;
@@ -190,8 +165,6 @@ async function handleAuth() {
 }
 
 async function handleLogout() {
-    console.log('🚪 [AUTH] Logging out...');
-    
     try {
         await chrome.runtime.sendMessage({ action: 'LOGOUT_REQUEST' });
         appState.isAuthenticated = false;
@@ -203,20 +176,15 @@ async function handleLogout() {
             showAuthScreen();
         }, 500);
     } catch (error) {
-        console.error('❌ Logout error:', error);
-        showError('Logout failed. Please try again.');
+        showError('Logout failed');
     }
 }
 
 function validateEmail(email) {
-    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return regex.test(email);
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-// ==================== UI MANAGEMENT ====================
 function showAuthScreen() {
-    console.log('🎨 [UI] Showing authentication screen');
-    
     const loadingScreen = document.getElementById('loading-screen');
     const authScreen = document.getElementById('auth-screen');
     const dashboard = document.getElementById('dashboard-screen');
@@ -224,16 +192,9 @@ function showAuthScreen() {
     if (loadingScreen) loadingScreen.classList.add('hidden');
     if (authScreen) authScreen.classList.remove('hidden');
     if (dashboard) dashboard.classList.add('hidden');
-    
-    const emailField = document.getElementById('email');
-    const passwordField = document.getElementById('password');
-    if (emailField) emailField.value = '';
-    if (passwordField) passwordField.value = '';
 }
 
 function showDashboard() {
-    console.log('🎨 [UI] Showing dashboard');
-    
     const loadingScreen = document.getElementById('loading-screen');
     const authScreen = document.getElementById('auth-screen');
     const dashboard = document.getElementById('dashboard-screen');
@@ -281,35 +242,31 @@ function updateStats() {
     }
 }
 
-// ==================== AUTOFILL FUNCTIONALITY ====================
 async function startAutoFill() {
     if (appState.automation.isRunning) {
-        showError('Another automation is already running. Please wait.');
+        showError('Another automation is running');
         return;
     }
 
-    console.log('🤖 [AUTOFILL] Starting intelligent AutoFill...');
-    
     const autofillBtn = document.getElementById('autofill-btn');
     const originalHTML = autofillBtn?.innerHTML || '🤖 AI AutoFill Ready';
     
     if (autofillBtn) {
         autofillBtn.disabled = true;
-        autofillBtn.innerHTML = '⚙️ Initializing...';
+        autofillBtn.innerHTML = '⚙️ Starting...';
     }
 
     appState.automation.isRunning = true;
-    appState.automation.currentAction = 'autofill';
-    appState.automation.startTime = Date.now();
 
     try {
         const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
         
         if (!currentTab) {
-            throw new Error('No active tab found. Please open a webpage with a form.');
+            throw new Error('No active tab');
         }
 
-        if (autofillBtn) autofillBtn.innerHTML = '📦 Loading extension...';
+        if (autofillBtn) autofillBtn.innerHTML = '📦 Loading...';
+        
         try {
             await chrome.scripting.executeScript({
                 target: { tabId: currentTab.id },
@@ -317,10 +274,10 @@ async function startAutoFill() {
             });
             await delay(1000);
         } catch (e) {
-            console.log('ℹ️ Content script already loaded');
+            console.log('ℹ️ Script already loaded');
         }
 
-        if (autofillBtn) autofillBtn.innerHTML = '📊 Loading your data...';
+        if (autofillBtn) autofillBtn.innerHTML = '📊 Loading data...';
         
         const userDataResponse = await chrome.runtime.sendMessage({
             action: 'FETCH_TRIPLE_SOURCE_DATA',
@@ -328,12 +285,10 @@ async function startAutoFill() {
         });
 
         if (!userDataResponse.success) {
-            throw new Error('Failed to load user data: ' + userDataResponse.error);
+            throw new Error('Failed to load data');
         }
 
-        console.log('✅ Triple-source data loaded');
-
-        if (autofillBtn) autofillBtn.innerHTML = '🤖 Filling form intelligently...';
+        if (autofillBtn) autofillBtn.innerHTML = '🤖 Filling...';
         
         const result = await chrome.tabs.sendMessage(currentTab.id, {
             action: 'PERFORM_AUTOFILL',
@@ -343,29 +298,24 @@ async function startAutoFill() {
         });
 
         if (result && result.success) {
-            const timeTaken = ((Date.now() - appState.automation.startTime) / 1000).toFixed(1);
-            const message = `AutoFill Complete! ${result.fieldsFilled}/${result.totalFields} fields (${result.successRate}%) in ${timeTaken}s`;
-            
-            console.log('✅ [AUTOFILL]', message);
-            showSuccess(message, 5000);
+            showSuccess(`✅ Filled ${result.fieldsFilled}/${result.totalFields} fields (${result.successRate}%)`);
             
             appState.stats.totalAutoFills++;
             updateStats();
             
             if (autofillBtn) {
-                autofillBtn.innerHTML = `✅ Filled ${result.fieldsFilled}/${result.totalFields} fields!`;
+                autofillBtn.innerHTML = `✅ Filled ${result.fieldsFilled} fields!`;
                 autofillBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
             }
         } else {
-            throw new Error(result?.error || 'AutoFill failed. Please try again.');
+            throw new Error('AutoFill failed');
         }
 
     } catch (error) {
-        console.error('❌ [AUTOFILL] Error:', error);
         showError('AutoFill failed: ' + error.message);
         
         if (autofillBtn) {
-            autofillBtn.innerHTML = '❌ Failed - Try Again';
+            autofillBtn.innerHTML = '❌ Failed';
             autofillBtn.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
         }
     } finally {
@@ -377,22 +327,22 @@ async function startAutoFill() {
             }, 3000);
         }
         appState.automation.isRunning = false;
-        appState.automation.currentAction = null;
     }
 }
 
-// ==================== LINKEDIN AUTOMATION (FIXED - FIRE AND FORGET!) ====================
+// ==================== LINKEDIN AUTOMATION (KEEPS BUTTON DISABLED!) ====================
 async function startLinkedInAutomation() {
     if (appState.automation.isRunning) {
-        showError('Another automation is already running. Please wait.');
+        showError('Already running');
         return;
     }
 
-    console.log('🔗 [LINKEDIN] Starting advanced LinkedIn automation...');
+    console.log('🔗 [LINKEDIN] Starting...');
     
     const linkedinBtn = document.getElementById('linkedin-automation-btn');
     const originalHTML = linkedinBtn?.innerHTML || '🔗 LinkedIn Automation';
     
+    // CRITICAL: Disable button immediately and keep it disabled!
     if (linkedinBtn) {
         linkedinBtn.disabled = true;
         linkedinBtn.innerHTML = '⚙️ Initializing...';
@@ -406,22 +356,23 @@ async function startLinkedInAutomation() {
         const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
         
         if (!currentTab) {
-            throw new Error('No active tab found. Please open a browser tab.');
+            throw new Error('No active tab');
         }
 
         // Check if on LinkedIn
         if (!currentTab.url.includes('linkedin.com')) {
             if (linkedinBtn) linkedinBtn.innerHTML = '🔗 Opening LinkedIn...';
-            showInfo('Navigating to LinkedIn job search...');
+            showInfo('Navigating to LinkedIn...');
             
             await chrome.tabs.update(currentTab.id, {
-                url: 'https://www.linkedin.com/jobs/search/?f_AL=true&sortBy=DD'
+                url: 'https://www.linkedin.com/jobs/search/?f_AL=true&sortBy=DD&f_TPR=r86400&keywords=Data+Analyst&location=India'
             });
             await delay(8000);
         }
 
-        // Inject content script
-        if (linkedinBtn) linkedinBtn.innerHTML = '📦 Loading automation system...';
+        // Inject script
+        if (linkedinBtn) linkedinBtn.innerHTML = '📦 Loading system...';
+        
         try {
             await chrome.scripting.executeScript({
                 target: { tabId: currentTab.id },
@@ -429,11 +380,11 @@ async function startLinkedInAutomation() {
             });
             await delay(2000);
         } catch (e) {
-            console.log('ℹ️ Content script already loaded');
+            console.log('ℹ️ Script loaded');
         }
 
-        // Load user data
-        if (linkedinBtn) linkedinBtn.innerHTML = '📊 Loading your profile data...';
+        // Load data
+        if (linkedinBtn) linkedinBtn.innerHTML = '📊 Loading data...';
         
         const userDataResponse = await chrome.runtime.sendMessage({
             action: 'FETCH_TRIPLE_SOURCE_DATA',
@@ -441,96 +392,123 @@ async function startLinkedInAutomation() {
         });
 
         if (!userDataResponse.success) {
-            throw new Error('Failed to load user data: ' + userDataResponse.error);
+            throw new Error('Failed to load data');
         }
 
-        console.log('✅ Triple-source data loaded for LinkedIn');
-
-        // ✅ CRITICAL FIX: Fire and forget - DON'T wait for response!
-        if (linkedinBtn) linkedinBtn.innerHTML = '🚀 Starting automation...';
+        // CRITICAL: Send message and DON'T re-enable button until completion!
+        if (linkedinBtn) linkedinBtn.innerHTML = '🚀 Running automation...';
         
-        // Send message WITHOUT waiting (fire and forget pattern)
+        console.log('📤 [POPUP] Sending START message...');
+        
+        // Send message with callback to handle completion
         chrome.tabs.sendMessage(currentTab.id, {
             action: 'START_LINKEDIN_AUTOMATION',
             userData: userDataResponse.data.merged,
             databaseData: userDataResponse.data.database,
             resumeData: userDataResponse.data.resume
         }, (response) => {
-            // This callback might not be called if popup closes - that's OK!
+            console.log('📥 [POPUP] Received response:', response);
+            
             if (chrome.runtime.lastError) {
-                console.log('ℹ️ Message sent successfully. Popup can close safely.');
+                console.log('ℹ️ [POPUP] Message sent (popup may have closed)');
+                
+                // Re-enable button after automation completes
+                if (linkedinBtn) {
+                    linkedinBtn.disabled = false;
+                    linkedinBtn.innerHTML = originalHTML;
+                    linkedinBtn.style.background = '';
+                }
+                appState.automation.isRunning = false;
+                
             } else if (response && response.success) {
-                console.log('✅ LinkedIn response received:', response);
+                console.log('✅ [POPUP] Automation completed successfully');
+                
                 appState.stats.totalLinkedInApps += (response.applicationsSubmitted || 0);
                 updateStats();
+                
+                showSuccess(`✅ Done!\nSubmitted: ${response.applicationsSubmitted}/5`);
+                
+                if (linkedinBtn) {
+                    linkedinBtn.innerHTML = `✅ Submitted ${response.applicationsSubmitted}/5!`;
+                    linkedinBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+                }
+                
+                // Re-enable button after 4 seconds
+                setTimeout(() => {
+                    if (linkedinBtn) {
+                        linkedinBtn.disabled = false;
+                        linkedinBtn.innerHTML = originalHTML;
+                        linkedinBtn.style.background = '';
+                    }
+                    appState.automation.isRunning = false;
+                }, 4000);
+                
+            } else {
+                // Error case
+                showError('Automation failed');
+                
+                if (linkedinBtn) {
+                    linkedinBtn.innerHTML = '❌ Failed';
+                    linkedinBtn.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+                }
+                
+                setTimeout(() => {
+                    if (linkedinBtn) {
+                        linkedinBtn.disabled = false;
+                        linkedinBtn.innerHTML = originalHTML;
+                        linkedinBtn.style.background = '';
+                    }
+                    appState.automation.isRunning = false;
+                }, 4000);
             }
         });
         
-        // Show success immediately WITHOUT waiting for automation to complete
-        showSuccess('✅ LinkedIn automation started!\n\nRunning in background.\nCheck browser console for live progress.', 6000);
+        // Show immediate feedback
+        showSuccess('✅ Automation started!\n\nRunning in background.\nCheck console (F12) for progress.', 6000);
         
-        if (linkedinBtn) {
-            linkedinBtn.innerHTML = '✅ Automation Running!';
-            linkedinBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
-        }
-        
-        // Update stats optimistically
-        appState.stats.totalLinkedInApps++;
-        updateStats();
-        
-        console.log('✅ [LINKEDIN] Automation message sent successfully');
-        console.log('ℹ️ [LINKEDIN] Open browser console (F12) to see real-time progress');
-        console.log('ℹ️ [LINKEDIN] You can close this popup - automation continues in background');
+        console.log('✅ [POPUP] Message sent successfully');
+        console.log('ℹ️ [POPUP] Open console (F12) for live progress');
 
     } catch (error) {
-        console.error('❌ [LINKEDIN] Error:', error);
-        showError('LinkedIn automation failed: ' + error.message);
+        console.error('❌ [POPUP] Error:', error);
+        showError('Failed: ' + error.message);
         
         if (linkedinBtn) {
-            linkedinBtn.innerHTML = '❌ Failed - Try Again';
+            linkedinBtn.innerHTML = '❌ Failed';
             linkedinBtn.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
         }
-    } finally {
-        if (linkedinBtn) {
-            setTimeout(() => {
+        
+        setTimeout(() => {
+            if (linkedinBtn) {
                 linkedinBtn.disabled = false;
                 linkedinBtn.innerHTML = originalHTML;
                 linkedinBtn.style.background = '';
-            }, 4000);
-        }
-        appState.automation.isRunning = false;
-        appState.automation.currentAction = null;
+            }
+            appState.automation.isRunning = false;
+        }, 4000);
     }
 }
 
-// ==================== NAVIGATION ====================
 function openDashboard() {
-    console.log('🌐 Opening web dashboard');
     window.open('https://fillora.figma.site/dashboard', '_blank');
 }
 
 function openProfile() {
-    console.log('👤 Opening profile page');
     window.open('https://fillora.figma.site/profile', '_blank');
 }
 
 function openSignup() {
-    console.log('📝 Opening signup page');
     window.open('https://fillora.figma.site', '_blank');
 }
 
 function openHelp() {
-    console.log('❓ Opening help center');
     window.open('https://fillora.figma.site/help', '_blank');
 }
 
-// ==================== INITIALIZATION ====================
 async function init() {
-    console.log('🔄 [INIT] Initializing Fillora extension...');
+    console.log('🔄 [INIT] Starting...');
     
     const loadingScreen = document.getElementById('loading-screen');
-    
-    addAnimationStyles();
     
     try {
         const response = await chrome.runtime.sendMessage({ action: 'GET_AUTH_STATUS' });
@@ -539,23 +517,17 @@ async function init() {
             appState.isAuthenticated = true;
             appState.user = response.user;
             
-            console.log('✅ User authenticated:', response.user.email);
-            
             setTimeout(() => {
                 if (loadingScreen) loadingScreen.classList.add('hidden');
                 showDashboard();
             }, 1500);
         } else {
-            console.log('ℹ️ User not authenticated');
-            
             setTimeout(() => {
                 if (loadingScreen) loadingScreen.classList.add('hidden');
                 showAuthScreen();
             }, 1500);
         }
     } catch (error) {
-        console.error('❌ Init error:', error);
-        
         setTimeout(() => {
             if (loadingScreen) loadingScreen.classList.add('hidden');
             showAuthScreen();
@@ -563,54 +535,8 @@ async function init() {
     }
 }
 
-function addAnimationStyles() {
-    if (!document.getElementById('fillora-popup-animations')) {
-        const styleSheet = document.createElement('style');
-        styleSheet.id = 'fillora-popup-animations';
-        styleSheet.textContent = `
-            @keyframes slideDown {
-                from {
-                    transform: translateY(-20px);
-                    opacity: 0;
-                }
-                to {
-                    transform: translateY(0);
-                    opacity: 1;
-                }
-            }
-            
-            @keyframes slideUp {
-                from {
-                    transform: translateY(0);
-                    opacity: 1;
-                }
-                to {
-                    transform: translateY(-20px);
-                    opacity: 0;
-                }
-            }
-            
-            @keyframes spin {
-                from { transform: rotate(0deg); }
-                to { transform: rotate(360deg); }
-            }
-            
-            @keyframes pulse {
-                0%, 100% { opacity: 1; }
-                50% { opacity: 0.5; }
-            }
-            
-            .hidden {
-                display: none !important;
-            }
-        `;
-        document.head.appendChild(styleSheet);
-    }
-}
-
-// ==================== EVENT LISTENERS ====================
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('📄 [DOM] Content loaded, setting up event listeners...');
+    console.log('📄 [DOM] Loaded');
     
     setTimeout(() => {
         const loginBtn = document.getElementById('login-btn');
@@ -642,19 +568,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const autofillBtn = document.getElementById('autofill-btn');
         if (autofillBtn) {
             autofillBtn.onclick = startAutoFill;
-            console.log('✅ AutoFill button listener attached');
         }
         
         const linkedinBtn = document.getElementById('linkedin-automation-btn');
         if (linkedinBtn) {
             linkedinBtn.onclick = startLinkedInAutomation;
-            console.log('✅ LinkedIn button listener attached');
         }
         
         const logoutBtn = document.getElementById('logout-btn');
         if (logoutBtn) {
             logoutBtn.onclick = handleLogout;
-            console.log('✅ Logout button listener attached');
         }
         
         const signupBtn = document.getElementById('signup-btn');
@@ -682,46 +605,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 100);
 });
 
-// ==================== UTILITY FUNCTIONS ====================
 function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// ==================== KEYBOARD SHORTCUTS ====================
-document.addEventListener('keydown', function(e) {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        if (appState.isAuthenticated && !appState.automation.isRunning) {
-            e.preventDefault();
-            startAutoFill();
-        }
-    }
-    
-    if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
-        if (appState.isAuthenticated && !appState.automation.isRunning) {
-            e.preventDefault();
-            startLinkedInAutomation();
-        }
-    }
-});
-
-// ==================== PERFORMANCE MONITORING ====================
-window.addEventListener('load', function() {
-    const loadTime = performance.now();
-    console.log(`⚡ Popup loaded in ${loadTime.toFixed(2)}ms`);
-});
-
-// ==================== GLOBAL ERROR HANDLER ====================
-window.addEventListener('error', function(e) {
-    console.error('💥 Global error:', e.error);
-    showError('An unexpected error occurred. Please refresh and try again.');
-});
-
-window.addEventListener('unhandledrejection', function(e) {
-    console.error('💥 Unhandled promise rejection:', e.reason);
-    showError('An unexpected error occurred. Please refresh and try again.');
-});
-
-console.log('✅ [FILLORA POPUP] Loaded successfully!');
-console.log('🎯 Features: Triple-Source AutoFill + LinkedIn Easy Apply (Fire-and-Forget)');
-console.log('⚡ Keyboard Shortcuts: Ctrl+Enter (AutoFill) | Ctrl+L (LinkedIn)');
-console.log('✅ NO MORE MESSAGE CHANNEL ERRORS!');
+console.log('✅ [FILLORA POPUP] Loaded!');
+console.log('🎯 Button stays DISABLED until automation completes');
