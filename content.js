@@ -301,7 +301,19 @@ if (typeof window.filloraInitialized === 'undefined') {
             
             if (!isLoggedIn) {
                 console.error('❌ [ERROR] User is NOT logged in to LinkedIn!');
-                showNotification('❌ Please login to LinkedIn first!', 'error', 8000);
+                
+                // Show PROMINENT notification on screen
+                showNotification(
+                    '🔒 NOT LOGGED IN!\n\nPlease login to LinkedIn first,\nthen click automation again.',
+                    'error',
+                    15000  // 15 seconds - very visible!
+                );
+                
+                // Also show alert for maximum visibility
+                setTimeout(() => {
+                    alert('⚠️ LinkedIn Login Required!\n\nYou are not logged in to LinkedIn.\n\nPlease:\n1. Login to LinkedIn\n2. Refresh the page\n3. Click automation button again');
+                }, 500);
+                
                 throw new Error('User must be logged in to LinkedIn. Please login and try again.');
             }
             console.log('✅ [2.1/3] User is logged in\n');
@@ -2508,29 +2520,68 @@ Answer:`;
     function showNotification(message, type, duration) {
         const notif = document.createElement('div');
         
-        const colors = { success: '#10B981', error: '#EF4444', info: '#3B82F6' };
+        const colors = { 
+            success: '#10B981', 
+            error: '#EF4444', 
+            info: '#3B82F6' 
+        };
+        
+        // Make error notifications MORE VISIBLE
+        const isError = type === 'error';
+        const fontSize = isError ? '16px' : '13px';
+        const padding = isError ? '20px 24px' : '12px 16px';
+        const maxWidth = isError ? '400px' : '300px';
+        const zIndex = isError ? '9999999' : '999999';
         
         notif.style.cssText = `
             position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 12px 16px;
+            top: ${isError ? '50%' : '20px'};
+            ${isError ? 'left: 50%; transform: translate(-50%, -50%);' : 'right: 20px;'}
+            padding: ${padding};
             background: ${colors[type] || colors.info};
             color: white;
-            border-radius: 8px;
-            z-index: 999999;
-            font-weight: 600;
-            font-size: 13px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            max-width: 300px;
+            border-radius: ${isError ? '12px' : '8px'};
+            z-index: ${zIndex};
+            font-weight: ${isError ? '700' : '600'};
+            font-size: ${fontSize};
+            box-shadow: 0 ${isError ? '8px 24px' : '4px 12px'} rgba(0,0,0,${isError ? '0.4' : '0.3'});
+            max-width: ${maxWidth};
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            text-align: ${isError ? 'center' : 'left'};
+            white-space: pre-line;
+            line-height: 1.5;
+            ${isError ? 'border: 3px solid rgba(255,255,255,0.3);' : ''}
         `;
         
         notif.textContent = message;
         document.body.appendChild(notif);
         
+        // Add animation for error
+        if (isError) {
+            notif.animate([
+                { transform: 'translate(-50%, -50%) scale(0.8)', opacity: 0 },
+                { transform: 'translate(-50%, -50%) scale(1.05)', opacity: 1 },
+                { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 }
+            ], {
+                duration: 300,
+                easing: 'ease-out'
+            });
+        }
+        
         setTimeout(() => {
-            if (notif.parentElement) notif.remove();
+            if (notif.parentElement) {
+                if (isError) {
+                    notif.animate([
+                        { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 },
+                        { transform: 'translate(-50%, -50%) scale(0.8)', opacity: 0 }
+                    ], {
+                        duration: 300,
+                        easing: 'ease-in'
+                    }).onfinish = () => notif.remove();
+                } else {
+                    notif.remove();
+                }
+            }
         }, duration);
     }
 
