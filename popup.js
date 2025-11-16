@@ -1,7 +1,4 @@
-// Fillora Chrome Extension - FIXED POPUP
-// ✅ Button stays DISABLED until automation completes
-// ✅ No second click needed
-console.log('🚀 [FILLORA POPUP] Loading fixed version...');
+console.log('🚀 [FILLORA POPUP] Loading with 3 automations...');
 
 let appState = {
     isAuthenticated: false,
@@ -14,6 +11,7 @@ let appState = {
     stats: {
         totalAutoFills: 0,
         totalLinkedInApps: 0,
+        totalNaukriApps: 0,
         successRate: 100
     }
 };
@@ -180,10 +178,6 @@ async function handleLogout() {
     }
 }
 
-function validateEmail(email) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
 function showAuthScreen() {
     const loadingScreen = document.getElementById('loading-screen');
     const authScreen = document.getElementById('auth-screen');
@@ -228,6 +222,7 @@ function updateStats() {
     const statsElements = {
         autoFills: document.getElementById('stat-autofills'),
         linkedInApps: document.getElementById('stat-linkedin'),
+        naukriApps: document.getElementById('stat-naukri'),
         successRate: document.getElementById('stat-success-rate')
     };
     
@@ -236,6 +231,9 @@ function updateStats() {
     }
     if (statsElements.linkedInApps) {
         statsElements.linkedInApps.textContent = appState.stats.totalLinkedInApps;
+    }
+    if (statsElements.naukriApps) {
+        statsElements.naukriApps.textContent = appState.stats.totalNaukriApps;
     }
     if (statsElements.successRate) {
         statsElements.successRate.textContent = appState.stats.successRate + '%';
@@ -330,7 +328,6 @@ async function startAutoFill() {
     }
 }
 
-// ==================== LINKEDIN AUTOMATION (KEEPS BUTTON DISABLED!) ====================
 async function startLinkedInAutomation() {
     if (appState.automation.isRunning) {
         showError('Already running');
@@ -342,7 +339,6 @@ async function startLinkedInAutomation() {
     const linkedinBtn = document.getElementById('linkedin-automation-btn');
     const originalHTML = linkedinBtn?.innerHTML || '🔗 LinkedIn Automation';
     
-    // CRITICAL: Disable button immediately and keep it disabled!
     if (linkedinBtn) {
         linkedinBtn.disabled = true;
         linkedinBtn.innerHTML = '⚙️ Initializing...';
@@ -359,7 +355,6 @@ async function startLinkedInAutomation() {
             throw new Error('No active tab');
         }
 
-        // Check if on LinkedIn
         if (!currentTab.url.includes('linkedin.com')) {
             if (linkedinBtn) linkedinBtn.innerHTML = '🔗 Opening LinkedIn...';
             showInfo('Navigating to LinkedIn...');
@@ -370,7 +365,6 @@ async function startLinkedInAutomation() {
             await delay(8000);
         }
 
-        // Inject script
         if (linkedinBtn) linkedinBtn.innerHTML = '📦 Loading system...';
         
         try {
@@ -383,7 +377,6 @@ async function startLinkedInAutomation() {
             console.log('ℹ️ Script loaded');
         }
 
-        // Load data
         if (linkedinBtn) linkedinBtn.innerHTML = '📊 Loading data...';
         
         const userDataResponse = await chrome.runtime.sendMessage({
@@ -395,12 +388,10 @@ async function startLinkedInAutomation() {
             throw new Error('Failed to load data');
         }
 
-        // CRITICAL: Send message and DON'T re-enable button until completion!
         if (linkedinBtn) linkedinBtn.innerHTML = '🚀 Running automation...';
         
         console.log('📤 [POPUP] Sending START message...');
         
-        // Send message with callback to handle completion
         chrome.tabs.sendMessage(currentTab.id, {
             action: 'START_LINKEDIN_AUTOMATION',
             userData: userDataResponse.data.merged,
@@ -412,7 +403,6 @@ async function startLinkedInAutomation() {
             if (chrome.runtime.lastError) {
                 console.log('ℹ️ [POPUP] Message sent (popup may have closed)');
                 
-                // Re-enable button after automation completes
                 if (linkedinBtn) {
                     linkedinBtn.disabled = false;
                     linkedinBtn.innerHTML = originalHTML;
@@ -421,7 +411,7 @@ async function startLinkedInAutomation() {
                 appState.automation.isRunning = false;
                 
             } else if (response && response.success) {
-                console.log('✅ [POPUP] Automation completed successfully');
+                console.log('✅ [POPUP] Automation completed');
                 
                 appState.stats.totalLinkedInApps += (response.applicationsSubmitted || 0);
                 updateStats();
@@ -433,7 +423,6 @@ async function startLinkedInAutomation() {
                     linkedinBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
                 }
                 
-                // Re-enable button after 4 seconds
                 setTimeout(() => {
                     if (linkedinBtn) {
                         linkedinBtn.disabled = false;
@@ -444,7 +433,6 @@ async function startLinkedInAutomation() {
                 }, 4000);
                 
             } else {
-                // Error case
                 showError('Automation failed');
                 
                 if (linkedinBtn) {
@@ -463,11 +451,7 @@ async function startLinkedInAutomation() {
             }
         });
         
-        // Show immediate feedback
-        showSuccess('✅ Automation started!\n\nRunning in background.\nCheck console (F12) for progress.', 6000);
-        
-        console.log('✅ [POPUP] Message sent successfully');
-        console.log('ℹ️ [POPUP] Open console (F12) for live progress');
+        showSuccess('✅ Automation started!\n\nCheck console (F12) for progress.', 6000);
 
     } catch (error) {
         console.error('❌ [POPUP] Error:', error);
@@ -489,6 +473,151 @@ async function startLinkedInAutomation() {
     }
 }
 
+async function startNaukriAutomation() {
+    if (appState.automation.isRunning) {
+        showError('Already running');
+        return;
+    }
+
+    console.log('🟢 [NAUKRI] Starting...');
+    
+    const naukriBtn = document.getElementById('naukri-automation-btn');
+    const originalHTML = naukriBtn?.innerHTML || '🟢 Naukri Automation';
+    
+    if (naukriBtn) {
+        naukriBtn.disabled = true;
+        naukriBtn.innerHTML = '⚙️ Initializing...';
+    }
+
+    appState.automation.isRunning = true;
+    appState.automation.currentAction = 'naukri';
+    appState.automation.startTime = Date.now();
+
+    try {
+        const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        
+        if (!currentTab) {
+            throw new Error('No active tab');
+        }
+
+        if (!currentTab.url.includes('naukri.com')) {
+            if (naukriBtn) naukriBtn.innerHTML = '🟢 Opening Naukri...';
+            showInfo('Navigating to Naukri...');
+            
+            await chrome.tabs.update(currentTab.id, {
+                url: 'https://www.naukri.com/data-analyst-jobs'
+            });
+            await delay(8000);
+        }
+
+        if (naukriBtn) naukriBtn.innerHTML = '📦 Loading system...';
+        
+        try {
+            await chrome.scripting.executeScript({
+                target: { tabId: currentTab.id },
+                files: ['config.js', 'content.js']
+            });
+            await delay(2000);
+        } catch (e) {
+            console.log('ℹ️ Script loaded');
+        }
+
+        if (naukriBtn) naukriBtn.innerHTML = '📊 Loading data...';
+        
+        const userDataResponse = await chrome.runtime.sendMessage({
+            action: 'FETCH_TRIPLE_SOURCE_DATA',
+            userId: appState.user.id
+        });
+
+        if (!userDataResponse.success) {
+            throw new Error('Failed to load data');
+        }
+
+        if (naukriBtn) naukriBtn.innerHTML = '🚀 Running automation...';
+        
+        console.log('📤 [POPUP] Sending NAUKRI START message...');
+        
+        chrome.tabs.sendMessage(currentTab.id, {
+            action: 'START_NAUKRI_AUTOMATION',
+            userData: userDataResponse.data.merged,
+            databaseData: userDataResponse.data.database,
+            resumeData: userDataResponse.data.resume
+        }, (response) => {
+            console.log('📥 [POPUP] Received response:', response);
+            
+            if (chrome.runtime.lastError) {
+                console.log('ℹ️ [POPUP] Message sent (popup may have closed)');
+                
+                if (naukriBtn) {
+                    naukriBtn.disabled = false;
+                    naukriBtn.innerHTML = originalHTML;
+                    naukriBtn.style.background = '';
+                }
+                appState.automation.isRunning = false;
+                
+            } else if (response && response.success) {
+                console.log('✅ [POPUP] Naukri automation completed');
+                
+                appState.stats.totalNaukriApps += (response.applicationsSubmitted || 0);
+                updateStats();
+                
+                showSuccess(`✅ Done!\nSubmitted: ${response.applicationsSubmitted}/5`);
+                
+                if (naukriBtn) {
+                    naukriBtn.innerHTML = `✅ Submitted ${response.applicationsSubmitted}/5!`;
+                    naukriBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+                }
+                
+                setTimeout(() => {
+                    if (naukriBtn) {
+                        naukriBtn.disabled = false;
+                        naukriBtn.innerHTML = originalHTML;
+                        naukriBtn.style.background = '';
+                    }
+                    appState.automation.isRunning = false;
+                }, 4000);
+                
+            } else {
+                showError('Automation failed');
+                
+                if (naukriBtn) {
+                    naukriBtn.innerHTML = '❌ Failed';
+                    naukriBtn.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+                }
+                
+                setTimeout(() => {
+                    if (naukriBtn) {
+                        naukriBtn.disabled = false;
+                        naukriBtn.innerHTML = originalHTML;
+                        naukriBtn.style.background = '';
+                    }
+                    appState.automation.isRunning = false;
+                }, 4000);
+            }
+        });
+        
+        showSuccess('✅ Naukri automation started!\n\nCheck console (F12) for progress.', 6000);
+
+    } catch (error) {
+        console.error('❌ [POPUP] Error:', error);
+        showError('Failed: ' + error.message);
+        
+        if (naukriBtn) {
+            naukriBtn.innerHTML = '❌ Failed';
+            naukriBtn.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+        }
+        
+        setTimeout(() => {
+            if (naukriBtn) {
+                naukriBtn.disabled = false;
+                naukriBtn.innerHTML = originalHTML;
+                naukriBtn.style.background = '';
+            }
+            appState.automation.isRunning = false;
+        }, 4000);
+    }
+}
+
 function openDashboard() {
     window.open('https://fillora.figma.site/dashboard', '_blank');
 }
@@ -499,10 +628,6 @@ function openProfile() {
 
 function openSignup() {
     window.open('https://fillora.figma.site', '_blank');
-}
-
-function openHelp() {
-    window.open('https://fillora.figma.site/help', '_blank');
 }
 
 async function init() {
@@ -575,6 +700,11 @@ document.addEventListener('DOMContentLoaded', function() {
             linkedinBtn.onclick = startLinkedInAutomation;
         }
         
+        const naukriBtn = document.getElementById('naukri-automation-btn');
+        if (naukriBtn) {
+            naukriBtn.onclick = startNaukriAutomation;
+        }
+        
         const logoutBtn = document.getElementById('logout-btn');
         if (logoutBtn) {
             logoutBtn.onclick = handleLogout;
@@ -595,11 +725,6 @@ document.addEventListener('DOMContentLoaded', function() {
             profileBtn.onclick = openProfile;
         }
         
-        const helpBtn = document.getElementById('help-btn');
-        if (helpBtn) {
-            helpBtn.onclick = openHelp;
-        }
-        
         init();
         
     }, 100);
@@ -609,5 +734,5 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-console.log('✅ [FILLORA POPUP] Loaded!');
-console.log('🎯 Button stays DISABLED until automation completes');
+console.log('✅ [FILLORA POPUP] Loaded with 3 automations!');
+console.log('🎯 AutoFill + LinkedIn + Naukri ready!');
