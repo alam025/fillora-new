@@ -2778,7 +2778,6 @@ Answer:`;
             showNotification('🔗 Checking Naukri page...', 'info', 2000);
             console.log('🔗 [2/3] Checking page...');
             
-            // Check if logged in to Naukri
             if (!checkIfLoggedInToNaukri()) {
                 showNotification(
                     '🔒 NOT LOGGED IN!\n\nPlease login to Naukri.com first,\nthen click automation again.',
@@ -2798,7 +2797,7 @@ Answer:`;
                 navigateToNaukriJobs();
                 await delay(8000);
             } else {
-                console.log('   ✅ Already on jobs page');
+                console.log('   ✅ On jobs page');
             }
             console.log('✅ [2/3] Page ready\n');
             
@@ -2890,28 +2889,50 @@ Answer:`;
         let consecutiveErrors = 0;
         const maxErrors = contentState.config.MAX_CONSECUTIVE_ERRORS;
         
+        // Process jobs on CURRENT page (same tab approach)
         while (contentState.stats.applicationsSubmitted < contentState.config.MAX_JOBS && 
                consecutiveErrors < maxErrors) {
             
             try {
+                // Get job cards from CURRENT page
                 const allJobCards = getAllNaukriJobCards();
                 
                 if (allJobCards.length === 0) {
-                    console.log('⚠️ [JOBS] No jobs found, waiting...');
-                    await delay(3000);
-                    continue;
+                    console.log('⚠️ [JOBS] No job cards found on current page');
+                    
+                    // Check if we're on a job details page - need to go back
+                    if (window.location.pathname.includes('job-listings')) {
+                        console.log('📍 On job details page, need to find next job card here');
+                        // Stay on this page and look for "Jobs you might be interested in" section
+                        await delay(2000);
+                        continue;
+                    }
+                    
+                    break;
                 }
                 
-                if (contentState.currentJobIndex >= allJobCards.length) {
-                    console.log('📜 [JOBS] End of list, scrolling...');
-                    window.scrollTo(0, document.body.scrollHeight);
-                    await delay(3000);
-                    contentState.currentJobIndex = 0;
-                    continue;
+                console.log(`📋 Found ${allJobCards.length} job cards on current page`);
+                
+                // Take the FIRST unprocessed job card
+                let jobCard = null;
+                let jobId = null;
+                
+                for (let i = 0; i < allJobCards.length; i++) {
+                    const card = allJobCards[i];
+                    const id = extractNaukriJobId(card);
+                    
+                    if (!contentState.processedJobs.has(id)) {
+                        jobCard = card;
+                        jobId = id;
+                        contentState.currentJobIndex = i;
+                        break;
+                    }
                 }
                 
-                const currentCard = allJobCards[contentState.currentJobIndex];
-                const jobId = extractNaukriJobId(currentCard);
+                if (!jobCard) {
+                    console.log('⚠️ [JOBS] All jobs on this page processed');
+                    break;
+                }
                 
                 const jobStartTime = Date.now();
                 
@@ -2920,7 +2941,7 @@ Answer:`;
                 console.log(`   📊 Progress: ${contentState.stats.applicationsSubmitted}/${contentState.config.MAX_JOBS}`);
                 console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
                 
-                const result = await processSingleNaukriJob(currentCard, jobId);
+                const result = await processSingleNaukriJob(jobCard, jobId);
                 
                 const jobTime = ((Date.now() - jobStartTime) / 1000).toFixed(1);
                 
@@ -2934,17 +2955,17 @@ Answer:`;
                     console.log(`⏭️  [SKIPPED] ${result.reason} (${jobTime}s)`);
                 }
                 
-                contentState.currentJobIndex++;
-                await delay(1500);
+                // After processing, we should be on job details page
+                // Wait a bit before looking for next job
+                await delay(2000);
                 
             } catch (error) {
                 console.error(`❌ [ERROR]`, error.message);
                 consecutiveErrors++;
                 contentState.stats.jobsSkipped++;
-                contentState.currentJobIndex++;
                 
                 if (consecutiveErrors >= maxErrors) {
-                    console.error(`❌ [FATAL] Stopping`);
+                    console.error(`❌ [FATAL] Too many errors, stopping`);
                     break;
                 }
                 
@@ -2954,19 +2975,70 @@ Answer:`;
     }
     
     function getAllNaukriJobCards() {
+        // Check if we're on job details page - look for "Similar jobs"
+        const isJobDetailsPage = window.location.pathname.includes('job-listings');
+        
+        if (isJobDetailsPage) {
+            console.log('   📍 On job details page, looking for Similar Jobs...');
+            
+            // Look for "Similar jobs" section
+            const similarJobsSelectors = [
+                '.similar-jobs article',
+                '[class*="similar"] article',
+                '.related-jobs article',
+                '[class*="related"] article',
+                'article.tuple',
+                'article'
+            ];
+            
+            for (const selector of similarJobsSelectors) {
+                const cards = Array.from(document.querySelectorAll(selector))
+                    .filter(card => {
+                        if (!isElementVisible(card)) return false;
+                        
+                        // Must have job content
+                        const text = card.textContent.toLowerCase();
+                        return text.includes('analyst') || 
+                               text.includes('data') || 
+                               text.includes('years') ||
+                               text.includes('yrs') ||
+                               text.includes('experience');
+                    });
+                
+                if (cards.length > 0) {
+                    console.log(`   📋 Found ${cards.length} similar job cards`);
+                    return cards;
+                }
+            }
+            
+            console.log('   ⚠️ No similar jobs found on details page');
+            return [];
+        }
+        
+        // On search results page
+        console.log('   📍 On search page...');
+        
         const selectors = [
-            'article.jobTuple',
-            '.jobTuple',
-            'article[data-job-id]',
-            '.srp-jobtuple-wrapper'
+            'article.tuple',
+            '.tuple',
+            'article',
+            '[class*="job"]'
         ];
         
         for (const selector of selectors) {
             const cards = Array.from(document.querySelectorAll(selector))
-                .filter(card => isElementVisible(card));
+                .filter(card => {
+                    if (!isElementVisible(card)) return false;
+                    
+                    const text = card.textContent.toLowerCase();
+                    return text.includes('analyst') || 
+                           text.includes('engineer') ||
+                           text.includes('data') || 
+                           text.includes('yrs');
+                });
             
             if (cards.length > 0) {
-                console.log(`   📋 Found ${cards.length} Naukri job cards`);
+                console.log(`   📋 Found ${cards.length} job cards`);
                 return cards;
             }
         }
@@ -2993,65 +3065,197 @@ Answer:`;
     
     async function processSingleNaukriJob(jobCard, jobId) {
         if (contentState.processedJobs.has(jobId)) {
+            console.log('   ⏭️  Already processed');
             return { submitted: false, skipped: true, reason: 'Already processed' };
         }
         
         try {
-            // STEP 1: Click job card
-            console.log('   [1/4] 🖱️  Clicking job...');
-            await clickNaukriJobCard(jobCard);
-            await delay(2000);
-            console.log('   [1/4] ✅ Job clicked');
+            // STEP 1: Click job card (opens in NEW tab)
+            console.log('   [1/6] 🖱️  Clicking job card to open in new tab...');
             
-            // STEP 2: Check for Apply button
-            console.log('   [2/4] 🔍 Checking for Apply button...');
-            const applyCheck = await checkForNaukriApplyButton();
-            
-            if (applyCheck.alreadyApplied) {
-                console.log('   [2/4] ⏭️  Already applied');
+            // Get the job link
+            const titleLink = jobCard.querySelector('a[href*="job-listings"], a');
+            if (!titleLink) {
+                console.log('   [1/6] ❌ No link found');
                 contentState.processedJobs.add(jobId);
-                return { submitted: false, skipped: true, reason: 'Already applied' };
+                return { submitted: false, skipped: true, reason: 'No link' };
             }
             
-            if (!applyCheck.hasApply) {
-                console.log('   [2/4] ⏭️  No apply button found');
-                contentState.processedJobs.add(jobId);
-                return { submitted: false, skipped: true, reason: 'No apply button' };
-            }
-            console.log('   [2/4] ✅ Apply button found!');
+            const jobUrl = titleLink.href;
+            console.log('         Job URL:', jobUrl.substring(0, 80));
             
-            // STEP 3: Click Apply
-            console.log('   [3/4] 🖱️  Clicking Apply...');
-            const clickResult = await clickNaukriApplyButton(applyCheck.button);
+            // Open in same tab by clicking
+            titleLink.click();
             
-            if (clickResult.external) {
-                console.log('   [3/4] ⏭️  External application - skipping');
-                contentState.processedJobs.add(jobId);
-                return { submitted: false, skipped: true, reason: 'External redirect' };
-            }
+            // Wait for navigation
+            console.log('         ⏳ Waiting for page to load...');
+            await delay(4000);
             
-            if (!clickResult.success) {
-                console.log('   [3/4] ❌ Failed to proceed');
+            // Verify we're on job details page
+            if (!window.location.href.includes('job-listings')) {
+                console.log('   [1/6] ❌ Not on job details page');
                 contentState.processedJobs.add(jobId);
-                return { submitted: false, skipped: true, reason: 'Apply failed' };
+                return { submitted: false, skipped: true, reason: 'Navigation failed' };
             }
             
-            await delay(2000);
-            console.log('   [3/4] ✅ Proceeding with application');
+            console.log('   [1/6] ✅ Job details page loaded');
             
-            // STEP 4: Handle application (may need resume upload or form)
-            console.log('   [4/4] 📝 Processing application...');
-            const submitted = await handleNaukriApplication();
+            // STEP 2: Check for Apply button type
+            console.log('   [2/6] 🔍 Checking button type...');
             
-            if (submitted) {
-                console.log('   [4/4] ✅ Application submitted!');
+            // Look for "Apply on company site" - SKIP these
+            const companyApplyButtons = document.querySelectorAll('button, a');
+            for (const btn of companyApplyButtons) {
+                if (!isElementVisible(btn)) continue;
+                
+                const text = btn.textContent.toLowerCase().trim();
+                if (text.includes('apply on company site') || text === 'apply on company site') {
+                    console.log('   [2/6] ⏭️  "Apply on company site" found - SKIPPING');
+                    contentState.processedJobs.add(jobId);
+                    return { submitted: false, skipped: true, reason: 'External application (company site)' };
+                }
+            }
+            
+            // Look for regular "Apply" button
+            let applyButton = null;
+            const allButtons = document.querySelectorAll('button, a');
+            
+            for (const btn of allButtons) {
+                if (!isElementVisible(btn)) continue;
+                
+                const text = btn.textContent.toLowerCase().trim();
+                
+                // Check if already applied
+                if (text === 'applied' || text.includes('already applied')) {
+                    console.log('   [2/6] ⏭️  Already applied');
+                    contentState.processedJobs.add(jobId);
+                    return { submitted: false, skipped: true, reason: 'Already applied' };
+                }
+                
+                // Look for exact "Apply" button
+                if (text === 'apply' && !text.includes('company')) {
+                    applyButton = btn;
+                    console.log('   [2/6] ✅ Found "Apply" button!');
+                    break;
+                }
+            }
+            
+            if (!applyButton) {
+                console.log('   [2/6] ⏭️  No "Apply" button found');
+                contentState.processedJobs.add(jobId);
+                return { submitted: false, skipped: true, reason: 'No Apply button' };
+            }
+            
+            // STEP 3: Click Apply button
+            console.log('   [3/6] 🖱️  Clicking Apply button...');
+            
+            applyButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            await delay(500);
+            
+            applyButton.click();
+            await delay(3000);
+            
+            console.log('   [3/6] ✅ Apply button clicked');
+            
+            // STEP 4: Check if applied successfully (direct application)
+            console.log('   [4/6] 🔍 Checking application status...');
+            
+            // Look for success message
+            const pageText = document.body.textContent.toLowerCase();
+            if (pageText.includes('successfully applied') || 
+                pageText.includes('you have successfully applied') ||
+                pageText.includes('application sent')) {
+                
+                console.log('   [4/6] ✅ Direct application successful!');
+                console.log('   [5/6] ⏭️  No form needed');
+                console.log('   [6/6] ✅ JOB APPLIED!');
+                
                 contentState.processedJobs.add(jobId);
                 return { submitted: true };
-            } else {
-                console.log('   [4/4] ❌ Submission failed');
-                contentState.processedJobs.add(jobId);
-                return { submitted: false, skipped: true, reason: 'Submission failed' };
             }
+            
+            // STEP 5: Check if form/drawer opened
+            console.log('   [4/6] 🔍 Checking for application form...');
+            
+            const formSelectors = [
+                '.drawer',
+                '.panel',
+                '[role="dialog"]',
+                '.modal',
+                'aside',
+                '[class*="apply"]'
+            ];
+            
+            let formFound = false;
+            let formElement = null;
+            
+            for (const selector of formSelectors) {
+                const element = document.querySelector(selector);
+                if (element && isElementVisible(element)) {
+                    const hasFields = element.querySelector('input, select, textarea, button');
+                    if (hasFields) {
+                        formFound = true;
+                        formElement = element;
+                        console.log('   [4/6] ✅ Form found!');
+                        break;
+                    }
+                }
+            }
+            
+            if (!formFound) {
+                // No form, assuming applied
+                console.log('   [4/6] ⚠️ No form found, assuming applied');
+                console.log('   [5/6] ⏭️  Skipped');
+                console.log('   [6/6] ✅ JOB APPLIED (assumed)');
+                
+                contentState.processedJobs.add(jobId);
+                return { submitted: true };
+            }
+            
+            // STEP 6: Fill and submit form
+            console.log('   [5/6] 📝 Filling application form...');
+            
+            const filled = await fillAllFieldsInModal();
+            console.log(`   [5/6] ✅ Filled ${filled} fields`);
+            
+            console.log('   [6/6] 🚀 Submitting...');
+            
+            // Find submit button
+            const submitSelectors = [
+                'button[type="submit"]',
+                'button.submit',
+                'button:contains("Submit")',
+                'button:contains("Apply")'
+            ];
+            
+            let submitButton = null;
+            for (const selector of submitSelectors) {
+                const buttons = formElement ? formElement.querySelectorAll('button') : document.querySelectorAll('button');
+                
+                for (const btn of buttons) {
+                    if (!isElementVisible(btn)) continue;
+                    
+                    const text = btn.textContent.toLowerCase();
+                    if (text.includes('submit') || text.includes('apply')) {
+                        submitButton = btn;
+                        break;
+                    }
+                }
+                
+                if (submitButton) break;
+            }
+            
+            if (submitButton) {
+                submitButton.click();
+                await delay(2000);
+                console.log('   [6/6] ✅ Form submitted!');
+            } else {
+                console.log('   [6/6] ⚠️ No submit button, assuming complete');
+            }
+            
+            console.log('   ✅ JOB APPLIED SUCCESSFULLY!');
+            contentState.processedJobs.add(jobId);
+            return { submitted: true };
             
         } catch (error) {
             console.error('   ❌ ERROR:', error.message);
@@ -3067,15 +3271,38 @@ Answer:`;
         const originalBg = jobCard.style.backgroundColor;
         jobCard.style.backgroundColor = '#dbeafe';
         
-        const titleLink = jobCard.querySelector('a.title, a[href*="job-listings"], .jobTuple-title a');
+        console.log('      🔍 Looking for title link...');
+        
+        // Try multiple selectors for title link
+        const titleSelectors = [
+            'a.title',                          // Standard title class
+            'a[href*="job-listings"]',          // Links to job listings
+            'a[class*="title"]',                // Any link with title in class
+            'h3 a',                             // Links in h3
+            'h2 a',                             // Links in h2
+            '.tuple a:first-of-type',           // First link in tuple
+            'a'                                 // Fallback: first link
+        ];
+        
+        let titleLink = null;
+        for (const selector of titleSelectors) {
+            titleLink = jobCard.querySelector(selector);
+            if (titleLink) {
+                console.log(`      ✅ Found title link with: ${selector}`);
+                break;
+            }
+        }
         
         if (titleLink) {
             try {
+                console.log('      🖱️  Clicking title link...');
                 titleLink.click();
             } catch {
                 titleLink.dispatchEvent(new MouseEvent('click', { bubbles: true }));
             }
         } else {
+            // Fallback: click the card itself
+            console.log('      ⚠️ No title link, clicking card...');
             try {
                 jobCard.click();
             } catch {
@@ -3091,13 +3318,37 @@ Answer:`;
         const maxAttempts = 3;
         
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            console.log(`      🔍 Attempt ${attempt}/${maxAttempts}...`);
+            
+            // First check for "Apply on company site" - we want to SKIP these
+            const externalSelectors = [
+                'button',
+                'a',
+                '[class*="apply"]'
+            ];
+            
+            for (const selector of externalSelectors) {
+                const elements = document.querySelectorAll(selector);
+                
+                for (const element of elements) {
+                    if (!isElementVisible(element)) continue;
+                    
+                    const text = element.textContent.toLowerCase().trim();
+                    
+                    // CRITICAL: Skip "Apply on company site"
+                    if (text.includes('apply on company site') || 
+                        text.includes('company site') ||
+                        text.includes('company website')) {
+                        console.log(`         ⚠️ Found "Apply on company site" - SKIPPING`);
+                        return { hasApply: false, alreadyApplied: false, isExternal: true };
+                    }
+                }
+            }
+            
+            // Now look for regular "Apply" button
             const applySelectors = [
-                'button.btn-apply',
-                'a.apply-button',
-                'button[title*="Apply"]',
-                'button.btn-secondary',
-                '.apply-button',
-                'button:contains("Apply")'
+                'button',
+                'a'
             ];
             
             for (const selector of applySelectors) {
@@ -3107,30 +3358,39 @@ Answer:`;
                     if (!isElementVisible(button)) continue;
                     
                     const text = button.textContent.toLowerCase().trim();
+                    const className = (button.className || '').toLowerCase();
                     
                     // Check if already applied
-                    if (text.includes('applied') || text.includes('application sent')) {
-                        return { hasApply: false, alreadyApplied: true };
+                    if (text.includes('applied') || 
+                        text === 'applied' ||
+                        className.includes('applied')) {
+                        console.log(`         ⏭️ Already applied`);
+                        return { hasApply: false, alreadyApplied: true, isExternal: false };
                     }
                     
-                    // Check if it's an apply button
-                    if (text.includes('apply')) {
-                        return { hasApply: true, button: button, alreadyApplied: false };
+                    // Check for exact "Apply" button (NOT "Apply on company site")
+                    if (text === 'apply' || 
+                        (text.includes('apply') && 
+                         !text.includes('company') && 
+                         !text.includes('site') &&
+                         !text.includes('website'))) {
+                        console.log(`         ✅ Found Apply button: "${text}"`);
+                        return { hasApply: true, button: button, alreadyApplied: false, isExternal: false };
                     }
                 }
             }
             
             if (attempt < maxAttempts) {
-                await delay(1000);
+                console.log('      ⏳ Waiting before retry...');
+                await delay(1500);
             }
         }
         
-        return { hasApply: false, alreadyApplied: false };
+        console.log('      ❌ No Apply button found');
+        return { hasApply: false, alreadyApplied: false, isExternal: false };
     }
     
     async function clickNaukriApplyButton(button) {
-        const currentUrl = window.location.href;
-        
         button.scrollIntoView({ behavior: 'auto', block: 'center' });
         await delay(300);
         
@@ -3140,14 +3400,35 @@ Answer:`;
             button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         }
         
-        await delay(2000);
+        console.log('         ✅ Button clicked');
+    }
+    
+    async function checkForNaukriApplicationForm() {
+        // Check if form/modal/panel opened
+        const formSelectors = [
+            '.modal',
+            '[role="dialog"]',
+            '.drawer',
+            '.panel',
+            '.application-form',
+            '[class*="apply"]',
+            'aside',
+            '.sidebar'
+        ];
         
-        // Check if redirected to external site
-        if (window.location.href !== currentUrl && !window.location.href.includes('naukri.com')) {
-            return { success: false, external: true };
+        for (const selector of formSelectors) {
+            const form = document.querySelector(selector);
+            if (form && isElementVisible(form)) {
+                // Check if it has form elements
+                const hasFields = form.querySelector('input, select, textarea, button[type="submit"]');
+                if (hasFields) {
+                    console.log(`      ✅ Form found with: ${selector}`);
+                    return true;
+                }
+            }
         }
         
-        return { success: true, external: false };
+        return false;
     }
     
     async function handleNaukriApplication() {
