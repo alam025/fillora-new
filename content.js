@@ -85,6 +85,13 @@ if (typeof window.filloraInitialized === 'undefined') {
                 return true;
             }
             
+            if (request.action === 'START_NAUKRI_AUTOMATION') {
+                startNaukriAutomation()
+                    .then(result => sendResponse(result))
+                    .catch(error => sendResponse({ success: false, error: error.message }));
+                return true;
+            }
+            
             sendResponse({ success: false, error: 'Unknown action' });
             return false;
         });
@@ -1364,9 +1371,23 @@ Best option number:`;
         
         let selectedOption = null;
         
-        // Salary
+        // CRITICAL: Salary/CTC - DIFFERENT logic for Current vs Expected
         if (context.includes('salary') || context.includes('ctc') || context.includes('compensation')) {
-            selectedOption = selectSalaryIntelligently(options, totalExperience);
+            // Check if this is EXPECTED salary (should be HIGHER)
+            const isExpected = /expected|desired|target|new|future/i.test(context);
+            const isCurrent = /current|present|existing/i.test(context);
+            
+            if (isExpected) {
+                console.log('      💰 Selecting EXPECTED salary (higher range)');
+                selectedOption = selectSalaryIntelligently(options, totalExperience, true); // true = expected
+            } else if (isCurrent) {
+                console.log('      💰 Selecting CURRENT salary (standard range)');
+                selectedOption = selectSalaryIntelligently(options, totalExperience, false); // false = current
+            } else {
+                // Ambiguous - default to current
+                console.log('      💰 Selecting salary (ambiguous - using current)');
+                selectedOption = selectSalaryIntelligently(options, totalExperience, false);
+            }
         }
         
         // Experience level
@@ -1451,9 +1472,10 @@ Best option number:`;
         return false;
     }
 
-    function selectSalaryIntelligently(options, exp) {
+    function selectSalaryIntelligently(options, exp, isExpected = false) {
         let min = 0, max = 0;
         
+        // Base salary ranges by experience
         if (exp < 1) { min = 200000; max = 400000; }
         else if (exp < 2) { min = 300000; max = 600000; }
         else if (exp < 3) { min = 500000; max = 900000; }
@@ -1461,6 +1483,15 @@ Best option number:`;
         else if (exp < 7) { min = 1200000; max = 2500000; }
         else if (exp < 10) { min = 1800000; max = 3500000; }
         else { min = 2500000; max = 5000000; }
+        
+        // CRITICAL: If this is EXPECTED salary, increase by 25-30%
+        if (isExpected) {
+            min = Math.floor(min * 1.25); // 25% increase
+            max = Math.floor(max * 1.30); // 30% increase
+            console.log(`         📈 Expected CTC range: ${min} - ${max} (25-30% higher)`);
+        } else {
+            console.log(`         💵 Current CTC range: ${min} - ${max}`);
+        }
         
         let best = null, bestScore = -1;
         
@@ -1493,6 +1524,10 @@ Best option number:`;
                 bestScore = score;
                 best = opt;
             }
+        }
+        
+        if (best) {
+            console.log(`         ✅ Selected: "${best.text}" (score: ${bestScore})`);
         }
         
         return best;
@@ -1825,7 +1860,19 @@ INDIAN JOB MARKET DATA (2025):
 
 INTELLIGENT ANSWERING RULES:
 
-1. CTC/SALARY/COMPENSATION questions:
+1. **SCALE/RATING QUESTIONS (CRITICAL!):**
+   - If asks "scale of 1-10" → Give integer 1-10 (e.g., "7" or "8")
+   - If asks "rate from 1-5" → Give integer 1-5 (e.g., "4")
+   - If asks "comfort level 0-10" → Give integer 0-10 (e.g., "8")
+   - NEVER answer "Yes" or "No" for scale questions!
+   - Pattern detection: contains "scale", "rate", "level", "/10", "1-10", "0-10", "1-5"
+   - Examples:
+     * "On a scale of 1-10, how comfortable are you with SaaS KPIs?" → "8"
+     * "Rate your proficiency (1-5)" → "4"
+     * "Comfort level with SQL (0-10)" → "7"
+     * "How would you rate your Python skills out of 10?" → "8"
+
+2. CTC/SALARY/COMPENSATION questions:
    - "Current CTC" / "Current salary" → ${currentCTC}
    - "Expected CTC" / "Expected salary" → ${expectedCTC}
    - "Desired compensation" → ${expectedCTC}
@@ -1833,39 +1880,41 @@ INTELLIGENT ANSWERING RULES:
    - If asks monthly → divide by 12
    - If asks in thousands → multiply by 100
 
-2. NOTICE PERIOD questions:
+3. NOTICE PERIOD questions:
+3. NOTICE PERIOD questions:
    - In DAYS → "30" or "15"
    - In WEEKS → "4" or "2"
    - In MONTHS → "1"
    - "Immediate availability" → "Yes" or "Immediate"
 
-3. EXPERIENCE questions:
+4. EXPERIENCE questions:
    - Total experience → "${exp}"
    - Years in role → "${Math.max(1, exp - 1)}"
    - Relevant experience → "${exp}"
 
-4. YES/NO questions:
+5. YES/NO questions:
    - Relocate/shift/flexible → "Yes"
    - Authorization/eligible → "Yes"
    - Visa sponsorship → "No"
    - Contract comfortable → "Yes"
    - Have skill/tool → "Yes" (if relevant to data science/tech)
 
-5. LOCATION questions:
+6. LOCATION questions:
    - Current location → "${userProfile.location}"
    - Preferred location → "Open to opportunities"
 
-6. NUMERIC questions (unknown context):
+7. NUMERIC questions (unknown context):
    - Look for salary/CTC keywords → Use CTC
    - Look for experience keywords → Use ${exp}
+   - Look for scale/rating → Give appropriate 1-10 range
    - Generic number → Make educated guess based on context
 
-7. TEXT questions:
+8. TEXT questions:
    - Keep professional & concise
    - Match typical LinkedIn responses
    - Under 200 characters
 
-8. UNKNOWN/UNCLEAR questions:
+9. UNKNOWN/UNCLEAR questions:
    - NEVER say "UNKNOWN" or "I don't know"
    - Make INTELLIGENT GUESS based on:
      * Question keywords and context
@@ -1936,6 +1985,34 @@ Now answer: "${label}"`;
         const exp = userData.totalExperience || 0;
         
         console.log(`      🧠 Making intelligent guess for: "${fieldInfo.label || context.substring(0, 30)}"`);
+        
+        // CRITICAL: Scale/Rating Questions (1-10, 1-5, etc.)
+        if (/scale|rate|rating|proficiency|comfort|level.*\d|out.*of.*\d|\/\d+|\d+-\d+/i.test(context)) {
+            // Check for number ranges
+            const scaleMatch = context.match(/(\d+)\s*-\s*(\d+)|(\d+)\s*to\s*(\d+)|out\s*of\s*(\d+)|\/(\d+)/i);
+            
+            if (scaleMatch) {
+                const min = parseInt(scaleMatch[1] || scaleMatch[3] || '0');
+                const max = parseInt(scaleMatch[2] || scaleMatch[4] || scaleMatch[5] || scaleMatch[6] || '10');
+                
+                // Give a good rating (70-80% of max)
+                const rating = Math.ceil(max * 0.75);
+                console.log(`      📊 Scale ${min}-${max} detected → answering ${rating}`);
+                return rating.toString();
+            }
+            
+            // Default to 7 or 8 for 1-10 scale
+            if (/1.*10|0.*10|ten/i.test(context)) {
+                console.log('      📊 1-10 scale detected → answering 8');
+                return '8';
+            }
+            
+            // 1-5 scale
+            if (/1.*5|five/i.test(context)) {
+                console.log('      📊 1-5 scale detected → answering 4');
+                return '4';
+            }
+        }
         
         // Notice Period
         if (/notice.*period/i.test(context)) {
@@ -2234,11 +2311,70 @@ Answer:`;
     }
 
     function fillCheckboxField(checkbox, fieldInfo) {
-        if (/agree|terms|policy|consent|authorize/i.test(fieldInfo.context)) {
+        const context = fieldInfo.context.toLowerCase();
+        const label = fieldInfo.label.toLowerCase();
+        
+        // Combine for better matching
+        const fullText = `${context} ${label}`;
+        
+        console.log(`      ☑️  Evaluating checkbox: "${fieldInfo.label.substring(0, 60)}"`);
+        
+        // AUTO-CHECK patterns (common in job applications)
+        const autoCheckPatterns = [
+            /agree/i,
+            /terms/i,
+            /condition/i,
+            /policy/i,
+            /consent/i,
+            /authorize/i,
+            /certify/i,              // NEW: "I certify that..."
+            /confirm/i,              // NEW: "I confirm that..."
+            /acknowledge/i,          // NEW: "I acknowledge..."
+            /understand/i,           // NEW: "I understand..."
+            /best.*knowledge/i,      // NEW: "to the best of my knowledge"
+            /information.*correct/i, // NEW: "information is correct"
+            /falsification/i,        // NEW: certification checkboxes
+            /equal.*opportunit/i,    // NEW: equal opportunity
+            /statistical.*purpose/i  // NEW: data collection consent
+        ];
+        
+        // Check if any pattern matches
+        for (const pattern of autoCheckPatterns) {
+            if (pattern.test(fullText)) {
+                console.log(`      ✅ Auto-checking: matches pattern "${pattern.source}"`);
+                checkbox.checked = true;
+                triggerFieldEvents(checkbox);
+                return true;
+            }
+        }
+        
+        // DON'T auto-check patterns (sensitive checkboxes)
+        const doNotCheckPatterns = [
+            /disability/i,
+            /veteran/i,
+            /race/i,
+            /ethnicity/i,
+            /gender/i,
+            /criminal/i,
+            /conviction/i
+        ];
+        
+        for (const pattern of doNotCheckPatterns) {
+            if (pattern.test(fullText)) {
+                console.log(`      ⏭️  Skipping sensitive checkbox: "${pattern.source}"`);
+                return false;
+            }
+        }
+        
+        // If context suggests it's required, check it
+        if (/required|mandatory|must/i.test(fullText)) {
+            console.log('      ✅ Checking required checkbox');
             checkbox.checked = true;
             triggerFieldEvents(checkbox);
             return true;
         }
+        
+        console.log('      ⏭️  No match, leaving unchecked');
         return false;
     }
 
@@ -2606,6 +2742,500 @@ Answer:`;
     function delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
+
+    // ==================== NAUKRI.COM AUTOMATION ====================
+    
+    async function startNaukriAutomation() {
+        if (contentState.isProcessing) {
+            throw new Error('Already running');
+        }
+        
+        console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('🚀 [NAUKRI] STARTING AUTOMATION');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+        
+        contentState.isProcessing = true;
+        contentState.processedJobs.clear();
+        contentState.currentJobIndex = 0;
+        contentState.stats.applicationsSubmitted = 0;
+        contentState.stats.jobsSkipped = 0;
+        contentState.stats.startTime = Date.now();
+        
+        try {
+            showNotification('📥 Loading data...', 'info', 2000);
+            
+            const userId = await getUserId();
+            if (!userId) throw new Error('Please login first');
+            
+            console.log('📥 [1/3] Loading data...');
+            await loadAllUserData(userId);
+            
+            if (!contentState.databaseData && !contentState.resumeData) {
+                throw new Error('No user data found');
+            }
+            console.log('✅ [1/3] Data loaded\n');
+            
+            showNotification('🔗 Checking Naukri page...', 'info', 2000);
+            console.log('🔗 [2/3] Checking page...');
+            
+            // Check if logged in to Naukri
+            if (!checkIfLoggedInToNaukri()) {
+                showNotification(
+                    '🔒 NOT LOGGED IN!\n\nPlease login to Naukri.com first,\nthen click automation again.',
+                    'error',
+                    15000
+                );
+                setTimeout(() => {
+                    alert('⚠️ Naukri Login Required!\n\nYou are not logged in to Naukri.com.\n\nPlease:\n1. Login to Naukri.com\n2. Refresh the page\n3. Click automation button again');
+                }, 500);
+                throw new Error('Not logged in to Naukri.com');
+            }
+            
+            const isOnCorrectPage = checkIfOnNaukriPage();
+            
+            if (!isOnCorrectPage) {
+                console.log('   Navigating to Naukri jobs...');
+                navigateToNaukriJobs();
+                await delay(8000);
+            } else {
+                console.log('   ✅ Already on jobs page');
+            }
+            console.log('✅ [2/3] Page ready\n');
+            
+            showNotification('🚀 Starting applications...', 'info', 2000);
+            console.log('🚀 [3/3] Processing jobs...\n');
+            
+            await processNaukriJobsSequentially();
+            
+            const totalTime = ((Date.now() - contentState.stats.startTime) / 1000).toFixed(1);
+            
+            console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log('✅ [COMPLETE]');
+            console.log(`📊 Submitted: ${contentState.stats.applicationsSubmitted}/${contentState.config.MAX_JOBS}`);
+            console.log(`⏭️  Skipped: ${contentState.stats.jobsSkipped}`);
+            console.log(`⏱️  Time: ${totalTime}s`);
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+            
+            showNotification(
+                `✅ Done!\nSubmitted: ${contentState.stats.applicationsSubmitted}/${contentState.config.MAX_JOBS}`,
+                'success',
+                8000
+            );
+            
+            return {
+                success: true,
+                applicationsSubmitted: contentState.stats.applicationsSubmitted,
+                jobsSkipped: contentState.stats.jobsSkipped,
+                totalTime: totalTime
+            };
+            
+        } catch (error) {
+            console.error('❌ [ERROR]', error);
+            throw error;
+        } finally {
+            contentState.isProcessing = false;
+        }
+    }
+    
+    function checkIfLoggedInToNaukri() {
+        // Check for login button (means NOT logged in)
+        const loginBtn = document.querySelector('a[href*="login"]');
+        if (loginBtn && loginBtn.textContent.toLowerCase().includes('login')) {
+            console.log('❌ [LOGIN] Found login button - NOT logged in');
+            return false;
+        }
+        
+        // Check for profile/user menu (means logged in)
+        const profileSelectors = [
+            '.nI-gNb-drawer__icon',
+            '.userPro',
+            '[data-ga-track="menu_user"]',
+            '.nI-gNb-img-container'
+        ];
+        
+        for (const selector of profileSelectors) {
+            if (document.querySelector(selector)) {
+                console.log('✅ [LOGIN] User is logged in');
+                return true;
+            }
+        }
+        
+        // Check for job cards (only visible when logged in)
+        const jobCards = document.querySelectorAll('.jobTuple, article[data-job-id]');
+        if (jobCards.length > 0) {
+            console.log('✅ [LOGIN] Job cards visible - logged in');
+            return true;
+        }
+        
+        console.log('⚠️ [LOGIN] Cannot confirm');
+        return false;
+    }
+    
+    function checkIfOnNaukriPage() {
+        const currentUrl = new URL(window.location.href);
+        
+        if (!currentUrl.hostname.includes('naukri.com')) return false;
+        
+        // Check if on jobs page or search results
+        return currentUrl.pathname.includes('/jobs') || 
+               currentUrl.pathname.includes('/data-analyst') ||
+               currentUrl.pathname.includes('/job-listings');
+    }
+    
+    function navigateToNaukriJobs() {
+        window.location.href = 'https://www.naukri.com/data-analyst-jobs';
+    }
+    
+    async function processNaukriJobsSequentially() {
+        let consecutiveErrors = 0;
+        const maxErrors = contentState.config.MAX_CONSECUTIVE_ERRORS;
+        
+        while (contentState.stats.applicationsSubmitted < contentState.config.MAX_JOBS && 
+               consecutiveErrors < maxErrors) {
+            
+            try {
+                const allJobCards = getAllNaukriJobCards();
+                
+                if (allJobCards.length === 0) {
+                    console.log('⚠️ [JOBS] No jobs found, waiting...');
+                    await delay(3000);
+                    continue;
+                }
+                
+                if (contentState.currentJobIndex >= allJobCards.length) {
+                    console.log('📜 [JOBS] End of list, scrolling...');
+                    window.scrollTo(0, document.body.scrollHeight);
+                    await delay(3000);
+                    contentState.currentJobIndex = 0;
+                    continue;
+                }
+                
+                const currentCard = allJobCards[contentState.currentJobIndex];
+                const jobId = extractNaukriJobId(currentCard);
+                
+                const jobStartTime = Date.now();
+                
+                console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+                console.log(`🎯 [JOB ${contentState.currentJobIndex + 1}/${allJobCards.length}] ID: ${jobId}`);
+                console.log(`   📊 Progress: ${contentState.stats.applicationsSubmitted}/${contentState.config.MAX_JOBS}`);
+                console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+                
+                const result = await processSingleNaukriJob(currentCard, jobId);
+                
+                const jobTime = ((Date.now() - jobStartTime) / 1000).toFixed(1);
+                
+                if (result.submitted) {
+                    contentState.stats.applicationsSubmitted++;
+                    consecutiveErrors = 0;
+                    console.log(`✅ [SUCCESS] ${contentState.stats.applicationsSubmitted}/${contentState.config.MAX_JOBS} (${jobTime}s)`);
+                    showNotification(`✅ App ${contentState.stats.applicationsSubmitted}/${contentState.config.MAX_JOBS}`, 'success', 2000);
+                } else {
+                    contentState.stats.jobsSkipped++;
+                    console.log(`⏭️  [SKIPPED] ${result.reason} (${jobTime}s)`);
+                }
+                
+                contentState.currentJobIndex++;
+                await delay(1500);
+                
+            } catch (error) {
+                console.error(`❌ [ERROR]`, error.message);
+                consecutiveErrors++;
+                contentState.stats.jobsSkipped++;
+                contentState.currentJobIndex++;
+                
+                if (consecutiveErrors >= maxErrors) {
+                    console.error(`❌ [FATAL] Stopping`);
+                    break;
+                }
+                
+                await delay(2000);
+            }
+        }
+    }
+    
+    function getAllNaukriJobCards() {
+        const selectors = [
+            'article.jobTuple',
+            '.jobTuple',
+            'article[data-job-id]',
+            '.srp-jobtuple-wrapper'
+        ];
+        
+        for (const selector of selectors) {
+            const cards = Array.from(document.querySelectorAll(selector))
+                .filter(card => isElementVisible(card));
+            
+            if (cards.length > 0) {
+                console.log(`   📋 Found ${cards.length} Naukri job cards`);
+                return cards;
+            }
+        }
+        
+        return [];
+    }
+    
+    function extractNaukriJobId(jobCard) {
+        const jobId = jobCard.getAttribute('data-job-id') ||
+                     jobCard.getAttribute('data-jobid') ||
+                     jobCard.querySelector('[data-job-id]')?.getAttribute('data-job-id');
+        
+        if (jobId) return jobId;
+        
+        const titleLink = jobCard.querySelector('a.title, a[href*="job-listings"]');
+        if (titleLink) {
+            const href = titleLink.href;
+            const match = href.match(/job-listings-(.+?)(?:\?|$)/);
+            if (match) return match[1];
+        }
+        
+        return `naukri-job-${contentState.currentJobIndex}`;
+    }
+    
+    async function processSingleNaukriJob(jobCard, jobId) {
+        if (contentState.processedJobs.has(jobId)) {
+            return { submitted: false, skipped: true, reason: 'Already processed' };
+        }
+        
+        try {
+            // STEP 1: Click job card
+            console.log('   [1/4] 🖱️  Clicking job...');
+            await clickNaukriJobCard(jobCard);
+            await delay(2000);
+            console.log('   [1/4] ✅ Job clicked');
+            
+            // STEP 2: Check for Apply button
+            console.log('   [2/4] 🔍 Checking for Apply button...');
+            const applyCheck = await checkForNaukriApplyButton();
+            
+            if (applyCheck.alreadyApplied) {
+                console.log('   [2/4] ⏭️  Already applied');
+                contentState.processedJobs.add(jobId);
+                return { submitted: false, skipped: true, reason: 'Already applied' };
+            }
+            
+            if (!applyCheck.hasApply) {
+                console.log('   [2/4] ⏭️  No apply button found');
+                contentState.processedJobs.add(jobId);
+                return { submitted: false, skipped: true, reason: 'No apply button' };
+            }
+            console.log('   [2/4] ✅ Apply button found!');
+            
+            // STEP 3: Click Apply
+            console.log('   [3/4] 🖱️  Clicking Apply...');
+            const clickResult = await clickNaukriApplyButton(applyCheck.button);
+            
+            if (clickResult.external) {
+                console.log('   [3/4] ⏭️  External application - skipping');
+                contentState.processedJobs.add(jobId);
+                return { submitted: false, skipped: true, reason: 'External redirect' };
+            }
+            
+            if (!clickResult.success) {
+                console.log('   [3/4] ❌ Failed to proceed');
+                contentState.processedJobs.add(jobId);
+                return { submitted: false, skipped: true, reason: 'Apply failed' };
+            }
+            
+            await delay(2000);
+            console.log('   [3/4] ✅ Proceeding with application');
+            
+            // STEP 4: Handle application (may need resume upload or form)
+            console.log('   [4/4] 📝 Processing application...');
+            const submitted = await handleNaukriApplication();
+            
+            if (submitted) {
+                console.log('   [4/4] ✅ Application submitted!');
+                contentState.processedJobs.add(jobId);
+                return { submitted: true };
+            } else {
+                console.log('   [4/4] ❌ Submission failed');
+                contentState.processedJobs.add(jobId);
+                return { submitted: false, skipped: true, reason: 'Submission failed' };
+            }
+            
+        } catch (error) {
+            console.error('   ❌ ERROR:', error.message);
+            contentState.processedJobs.add(jobId);
+            return { submitted: false, skipped: true, reason: error.message };
+        }
+    }
+    
+    async function clickNaukriJobCard(jobCard) {
+        jobCard.scrollIntoView({ behavior: 'auto', block: 'center' });
+        await delay(500);
+        
+        const originalBg = jobCard.style.backgroundColor;
+        jobCard.style.backgroundColor = '#dbeafe';
+        
+        const titleLink = jobCard.querySelector('a.title, a[href*="job-listings"], .jobTuple-title a');
+        
+        if (titleLink) {
+            try {
+                titleLink.click();
+            } catch {
+                titleLink.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            }
+        } else {
+            try {
+                jobCard.click();
+            } catch {
+                jobCard.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            }
+        }
+        
+        await delay(300);
+        jobCard.style.backgroundColor = originalBg;
+    }
+    
+    async function checkForNaukriApplyButton() {
+        const maxAttempts = 3;
+        
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            const applySelectors = [
+                'button.btn-apply',
+                'a.apply-button',
+                'button[title*="Apply"]',
+                'button.btn-secondary',
+                '.apply-button',
+                'button:contains("Apply")'
+            ];
+            
+            for (const selector of applySelectors) {
+                const buttons = document.querySelectorAll(selector);
+                
+                for (const button of buttons) {
+                    if (!isElementVisible(button)) continue;
+                    
+                    const text = button.textContent.toLowerCase().trim();
+                    
+                    // Check if already applied
+                    if (text.includes('applied') || text.includes('application sent')) {
+                        return { hasApply: false, alreadyApplied: true };
+                    }
+                    
+                    // Check if it's an apply button
+                    if (text.includes('apply')) {
+                        return { hasApply: true, button: button, alreadyApplied: false };
+                    }
+                }
+            }
+            
+            if (attempt < maxAttempts) {
+                await delay(1000);
+            }
+        }
+        
+        return { hasApply: false, alreadyApplied: false };
+    }
+    
+    async function clickNaukriApplyButton(button) {
+        const currentUrl = window.location.href;
+        
+        button.scrollIntoView({ behavior: 'auto', block: 'center' });
+        await delay(300);
+        
+        try {
+            button.click();
+        } catch {
+            button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        }
+        
+        await delay(2000);
+        
+        // Check if redirected to external site
+        if (window.location.href !== currentUrl && !window.location.href.includes('naukri.com')) {
+            return { success: false, external: true };
+        }
+        
+        return { success: true, external: false };
+    }
+    
+    async function handleNaukriApplication() {
+        // Check for resume upload popup
+        const resumePopup = document.querySelector('.uploadResume, [data-test="upload-resume"]');
+        
+        if (resumePopup && isElementVisible(resumePopup)) {
+            console.log('      📄 Resume upload required');
+            
+            const uploaded = await uploadResumeToNaukri();
+            
+            if (!uploaded) {
+                console.log('      ❌ Resume upload failed');
+                return false;
+            }
+            
+            console.log('      ✅ Resume uploaded');
+            await delay(2000);
+        }
+        
+        // Check for application form
+        const formModal = document.querySelector('.modal, [role="dialog"], .application-form');
+        
+        if (formModal && isElementVisible(formModal)) {
+            console.log('      📝 Filling application form');
+            
+            const filled = await fillAllFieldsInModal();
+            console.log(`      ✅ Filled ${filled} fields`);
+            
+            await delay(1000);
+            
+            // Click submit
+            const submitBtn = await findNaukriSubmitButton();
+            if (submitBtn) {
+                submitBtn.click();
+                await delay(3000);
+                return true;
+            }
+        }
+        
+        // If no form, application may be direct
+        await delay(2000);
+        const successMsg = document.body.textContent.toLowerCase();
+        if (successMsg.includes('applied') || successMsg.includes('application sent')) {
+            return true;
+        }
+        
+        return false;
+    }
+    
+    async function uploadResumeToNaukri() {
+        try {
+            const fileInput = document.querySelector('input[type="file"]');
+            if (!fileInput) return false;
+            
+            return await uploadResumeFile(fileInput);
+        } catch (error) {
+            return false;
+        }
+    }
+    
+    async function findNaukriSubmitButton() {
+        const submitSelectors = [
+            'button[type="submit"]',
+            'button.btn-primary',
+            'button.submit-button',
+            'input[type="submit"]',
+            'button:contains("Submit")',
+            'button:contains("Apply")'
+        ];
+        
+        for (const selector of submitSelectors) {
+            const buttons = document.querySelectorAll(selector);
+            
+            for (const btn of buttons) {
+                if (isElementVisible(btn) && !btn.disabled) {
+                    const text = btn.textContent.toLowerCase();
+                    if (text.includes('submit') || text.includes('apply')) {
+                        return btn;
+                    }
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    // ==================== END NAUKRI AUTOMATION ====================
 
     async function getUserId() {
         try {
