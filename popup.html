@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fillora - AI AutoFill + LinkedIn</title>
+    <title>Fillora - AI AutoFill + Automation</title>
     <style>
         * {
             margin: 0;
@@ -13,7 +13,7 @@
 
         body {
             width: 380px;
-            min-height: 500px;
+            min-height: 550px;
             font-family: 'Segoe UI', system-ui, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
         }
@@ -225,7 +225,7 @@
             padding: 20px;
             font-size: 17px;
             font-weight: 800;
-            margin-bottom: 16px;
+            margin-bottom: 12px;
             background: linear-gradient(135deg, #10b981, #059669);
             box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4);
         }
@@ -235,13 +235,24 @@
             padding: 20px;
             font-size: 17px;
             font-weight: 800;
-            margin-bottom: 16px;
+            margin-bottom: 12px;
             background: linear-gradient(135deg, #0077B5, #005885);
             box-shadow: 0 8px 24px rgba(0, 119, 181, 0.4);
         }
 
+        .naukri-button {
+            width: 100%;
+            padding: 20px;
+            font-size: 17px;
+            font-weight: 800;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, #FF6B35, #FF4500);
+            box-shadow: 0 8px 24px rgba(255, 107, 53, 0.4);
+        }
+
         .autofill-button:hover,
-        .linkedin-button:hover {
+        .linkedin-button:hover,
+        .naukri-button:hover {
             transform: translateY(-3px);
         }
 
@@ -379,7 +390,7 @@
                     <div class="logo">F</div>
                     <div>
                         <div class="title">Fillora</div>
-                        <div class="subtitle">AI AutoFill + LinkedIn</div>
+                        <div class="subtitle">AI AutoFill + Automation</div>
                     </div>
                 </div>
             </div>
@@ -405,7 +416,7 @@
                 
                 <div class="info-box">
                     <strong>🚀 Getting Started</strong><br>
-                    Complete your profile at <strong>fillora.figma.site</strong>, then use this extension for AI-powered autofill on any form.
+                    Complete your profile at <strong>fillora.figma.site</strong>, then use this extension for AI-powered autofill and automation.
                 </div>
             </div>
         </div>
@@ -445,10 +456,16 @@
                     🔗 LinkedIn Automation (5 Jobs)
                 </button>
                 
+                <!-- Naukri Automation Button -->
+                <button id="naukri-automation-btn" class="button button-primary naukri-button">
+                    🟢 Naukri Automation (5 Jobs)
+                </button>
+                
                 <div class="info-box">
                     <strong>💡 How to Use:</strong><br><br>
-                    <strong>AutoFill:</strong> Navigate to any form and click the AutoFill button to fill with your real data from database + resume.<br><br>
-                    <strong>LinkedIn:</strong> Click to automatically apply to 5 Easy Apply jobs on LinkedIn with your real information.
+                    <strong>AutoFill:</strong> Navigate to any form and click to fill with your data.<br><br>
+                    <strong>LinkedIn:</strong> Automatically apply to 5 Easy Apply jobs.<br><br>
+                    <strong>Naukri:</strong> Automatically apply to 5 jobs on Naukri.com.
                 </div>
                 
                 <div class="quick-actions">
@@ -463,7 +480,6 @@
         </div>
     </div>
 
-    <!-- IMPORTANT: Load config.js BEFORE popup.js -->
     <script src="config.js"></script>
     <script src="popup.js"></script>
 </body>
