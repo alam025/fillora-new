@@ -1,38 +1,41 @@
 {
   "manifest_version": 3,
-  "name": "Fillora - AI AutoFill & LinkedIn Automation",
-  "version": "1.0.1",
-  "description": "Intelligent form filling, LinkedIn Easy Apply, and Naukri automation",
+  "name": "Fillora - Job Application Automation",
+  "version": "1.0.0",
+  "description": "Automate LinkedIn and Naukri.com job applications",
   
   "permissions": [
     "storage",
     "activeTab",
-    "scripting",
     "tabs"
   ],
   
   "host_permissions": [
-    "<all_urls>"
+    "*://www.linkedin.com/*",
+    "*://linkedin.com/*",
+    "*://www.naukri.com/*",
+    "*://naukri.com/*",
+    "*://*.naukri.com/*"
   ],
   
   "background": {
-    "service_worker": "background.js",
-    "type": "module"
+    "service_worker": "background.js"
   },
   
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["config.js", "content.js"],
-      "run_at": "document_start"
-    },
-    {
       "matches": [
-        "https://*.naukri.com/*",
-        "https://naukri.com/*"
+        "*://www.linkedin.com/*",
+        "*://linkedin.com/*",
+        "*://www.naukri.com/*",
+        "*://naukri.com/*",
+        "*://*.naukri.com/*"
       ],
-      "js": ["naukri-automation.js"],
-      "run_at": "document_idle",
+      "js": [
+        "content.js",
+        "naukri-content.js"
+      ],
+      "run_at": "document_end",
       "all_frames": false
     }
   ],
@@ -40,22 +43,15 @@
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "icon16.png",
-      "48": "icon48.png",
-      "128": "icon128.png"
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
     }
   },
   
   "icons": {
-    "16": "icon16.png",
-    "48": "icon48.png",
-    "128": "icon128.png"
-  },
-  
-  "web_accessible_resources": [
-    {
-      "resources": ["config.js"],
-      "matches": ["<all_urls>"]
-    }
-  ]
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
 }
