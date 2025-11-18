@@ -473,25 +473,25 @@ async function startLinkedInAutomation() {
     }
 }
 
+// ==================== NAUKRI AUTOMATION - UPDATED FOR PERSISTENT CONTENT SCRIPT ====================
+
 async function startNaukriAutomation() {
     if (appState.automation.isRunning) {
         showError('Already running');
         return;
     }
 
-    console.log('🟢 [NAUKRI] Starting...');
+    console.log('🟢 [NAUKRI] Starting from popup...');
     
     const naukriBtn = document.getElementById('naukri-automation-btn');
-    const originalHTML = naukriBtn?.innerHTML || '🟢 Naukri Automation';
+    const originalHTML = naukriBtn?.innerHTML || '🟢 Naukri Automation (5 Jobs)';
     
     if (naukriBtn) {
         naukriBtn.disabled = true;
-        naukriBtn.innerHTML = '⚙️ Initializing...';
+        naukriBtn.innerHTML = '⚙️ Starting...';
     }
 
     appState.automation.isRunning = true;
-    appState.automation.currentAction = 'naukri';
-    appState.automation.startTime = Date.now();
 
     try {
         const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -500,106 +500,59 @@ async function startNaukriAutomation() {
             throw new Error('No active tab');
         }
 
+        // Navigate to Naukri if not there
         if (!currentTab.url.includes('naukri.com')) {
             if (naukriBtn) naukriBtn.innerHTML = '🟢 Opening Naukri...';
-            showInfo('Navigating to Naukri...');
+            showInfo('Navigating to Naukri.com...');
             
             await chrome.tabs.update(currentTab.id, {
                 url: 'https://www.naukri.com/data-analyst-jobs'
             });
-            await delay(8000);
+            
+            // Wait for page load
+            await delay(6000);
+            
+            showInfo('Page loaded! Starting automation...');
         }
 
-        if (naukriBtn) naukriBtn.innerHTML = '📦 Loading system...';
-        
-        try {
-            await chrome.scripting.executeScript({
-                target: { tabId: currentTab.id },
-                files: ['config.js', 'content.js']
-            });
-            await delay(2000);
-        } catch (e) {
-            console.log('ℹ️ Script loaded');
-        }
-
-        if (naukriBtn) naukriBtn.innerHTML = '📊 Loading data...';
-        
-        const userDataResponse = await chrome.runtime.sendMessage({
-            action: 'FETCH_TRIPLE_SOURCE_DATA',
-            userId: appState.user.id
-        });
-
-        if (!userDataResponse.success) {
-            throw new Error('Failed to load data');
-        }
-
-        if (naukriBtn) naukriBtn.innerHTML = '🚀 Running automation...';
+        // Content script is already injected via manifest
+        // Just send the START message
+        if (naukriBtn) naukriBtn.innerHTML = '🚀 Starting automation...';
         
         console.log('📤 [POPUP] Sending NAUKRI START message...');
         
+        // Send message to naukri-content.js
         chrome.tabs.sendMessage(currentTab.id, {
-            action: 'START_NAUKRI_AUTOMATION',
-            userData: userDataResponse.data.merged,
-            databaseData: userDataResponse.data.database,
-            resumeData: userDataResponse.data.resume
+            action: 'START_NAUKRI_AUTOMATION'
         }, (response) => {
-            console.log('📥 [POPUP] Received response:', response);
-            
             if (chrome.runtime.lastError) {
-                console.log('ℹ️ [POPUP] Message sent (popup may have closed)');
-                
-                if (naukriBtn) {
-                    naukriBtn.disabled = false;
-                    naukriBtn.innerHTML = originalHTML;
-                    naukriBtn.style.background = '';
-                }
-                appState.automation.isRunning = false;
-                
+                // This is OK - popup might have closed
+                console.log('ℹ️ [POPUP] Message sent (popup may close)');
             } else if (response && response.success) {
-                console.log('✅ [POPUP] Naukri automation completed');
-                
-                appState.stats.totalNaukriApps += (response.applicationsSubmitted || 0);
-                updateStats();
-                
-                showSuccess(`✅ Done!\nSubmitted: ${response.applicationsSubmitted}/5`);
-                
-                if (naukriBtn) {
-                    naukriBtn.innerHTML = `✅ Submitted ${response.applicationsSubmitted}/5!`;
-                    naukriBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
-                }
-                
-                setTimeout(() => {
-                    if (naukriBtn) {
-                        naukriBtn.disabled = false;
-                        naukriBtn.innerHTML = originalHTML;
-                        naukriBtn.style.background = '';
-                    }
-                    appState.automation.isRunning = false;
-                }, 4000);
-                
-            } else {
-                showError('Automation failed');
-                
-                if (naukriBtn) {
-                    naukriBtn.innerHTML = '❌ Failed';
-                    naukriBtn.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
-                }
-                
-                setTimeout(() => {
-                    if (naukriBtn) {
-                        naukriBtn.disabled = false;
-                        naukriBtn.innerHTML = originalHTML;
-                        naukriBtn.style.background = '';
-                    }
-                    appState.automation.isRunning = false;
-                }, 4000);
+                console.log('✅ [POPUP] Naukri automation started');
             }
         });
+
+        // Show success message
+        showSuccess('✅ Naukri automation started!\n\n🟢 Green indicator shows progress.\n\nYou can close this popup.\n\nAutomation will continue in background.\n\nCheck console (F12) for details.', 10000);
         
-        showSuccess('✅ Naukri automation started!\n\nCheck console (F12) for progress.', 6000);
+        if (naukriBtn) {
+            naukriBtn.innerHTML = '✅ Running...';
+            naukriBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+        }
+
+        // Reset button after delay
+        setTimeout(() => {
+            if (naukriBtn) {
+                naukriBtn.disabled = false;
+                naukriBtn.innerHTML = originalHTML;
+                naukriBtn.style.background = '';
+            }
+            appState.automation.isRunning = false;
+        }, 3000);
 
     } catch (error) {
-        console.error('❌ [POPUP] Error:', error);
+        console.error('❌ [POPUP] Naukri error:', error);
         showError('Failed: ' + error.message);
         
         if (naukriBtn) {
@@ -734,5 +687,5 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-console.log('✅ [FILLORA POPUP] Loaded with 3 automations!');
-console.log('🎯 AutoFill + LinkedIn + Naukri ready!');
+console.log('✅ [FILLORA POPUP] Loaded!');
+console.log('🎯 Ready for AI AutoFill, LinkedIn, and Naukri automation!');
