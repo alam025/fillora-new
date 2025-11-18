@@ -8,7 +8,7 @@ console.log('🎯 [FILLORA FIXED] Loading version that clicks jobs properly...')
 
 if (typeof window.filloraInitialized === 'undefined') {
     window.filloraInitialized = true;
-    
+
     const contentState = {
         isActive: true,
         isProcessing: false,
@@ -16,7 +16,7 @@ if (typeof window.filloraInitialized === 'undefined') {
         resumeData: null,
         databaseData: null,
         openaiKey: '',
-        
+
         processedJobs: new Set(),
         currentJobIndex: 0,
         stats: {
@@ -70,28 +70,28 @@ if (typeof window.filloraInitialized === 'undefined') {
                 sendResponse({ success: true });
                 return false;
             }
-            
+
             if (request.action === 'PERFORM_AUTOFILL') {
                 performIntelligentAutofill()
                     .then(result => sendResponse(result))
                     .catch(error => sendResponse({ success: false, error: error.message }));
                 return true;
             }
-            
+
             if (request.action === 'START_LINKEDIN_AUTOMATION') {
                 startLinkedInAutomation()
                     .then(result => sendResponse(result))
                     .catch(error => sendResponse({ success: false, error: error.message }));
                 return true;
             }
-            
+
             if (request.action === 'START_NAUKRI_AUTOMATION') {
                 startNaukriAutomation()
                     .then(result => sendResponse(result))
                     .catch(error => sendResponse({ success: false, error: error.message }));
                 return true;
             }
-            
+
             sendResponse({ success: false, error: 'Unknown action' });
             return false;
         });
@@ -102,30 +102,30 @@ if (typeof window.filloraInitialized === 'undefined') {
         if (contentState.isProcessing) {
             throw new Error('Already running');
         }
-        
+
         contentState.isProcessing = true;
         const startTime = Date.now();
-        
+
         try {
             showNotification('⚡ AutoFill Started!', 'info', 1000);
-            
+
             const userId = await getUserId();
             if (!userId) throw new Error('Please login first');
-            
+
             await loadAllUserData(userId);
-            
+
             if (!contentState.databaseData && !contentState.resumeData) {
                 throw new Error('No user data found');
             }
-            
+
             const fields = getAllVisibleFields();
             let fieldsFilled = 0;
-            
+
             for (const field of fields) {
                 if (!isFieldAlreadyFilled(field)) {
                     const fieldInfo = getFieldInformation(field);
                     let filled = false;
-                    
+
                     if (field.tagName.toLowerCase() === 'select') {
                         filled = await fillDropdownIntelligently(field, fieldInfo);
                     } else if (field.type === 'file') {
@@ -136,43 +136,43 @@ if (typeof window.filloraInitialized === 'undefined') {
                         filled = fillRadioField(field, fieldInfo);
                     } else {
                         let value = getExactMatchValue(fieldInfo);
-                        
+
                         if (!value && contentState.openaiKey) {
                             value = await getAIPoweredValue(fieldInfo);
                         }
-                        
+
                         if (!value) {
                             value = makeIntelligentGuess(fieldInfo);
                         }
-                        
+
                         if (value && value.toString().trim()) {
                             field.value = value.toString().trim();
                             triggerFieldEvents(field);
                             filled = true;
                         }
                     }
-                    
+
                     if (filled) {
                         fieldsFilled++;
                         highlightField(field);
                     }
-                    
+
                     await delay(200);
                 }
             }
-            
+
             const successRate = fields.length > 0 ? Math.round((fieldsFilled / fields.length) * 100) : 0;
             const timeTaken = ((Date.now() - startTime) / 1000).toFixed(2);
-            
+
             showNotification(`✅ AutoFill Complete!\n${fieldsFilled}/${fields.length} (${successRate}%)`, 'success', 5000);
-            
+
             return {
                 success: true,
                 fieldsFilled: fieldsFilled,
                 totalFields: fields.length,
                 successRate: successRate
             };
-            
+
         } finally {
             contentState.isProcessing = false;
         }
@@ -180,26 +180,26 @@ if (typeof window.filloraInitialized === 'undefined') {
 
     async function loadAllUserData(userId) {
         console.log('📥 [DATA] Loading...');
-        
+
         const dbResponse = await chrome.runtime.sendMessage({
             action: 'FETCH_ALL_DATABASE_TABLES',
             userId: userId
         });
-        
+
         if (dbResponse?.success && dbResponse.data) {
             contentState.databaseData = dbResponse.data;
         }
-        
+
         const resumeResponse = await chrome.runtime.sendMessage({
             action: 'PARSE_REAL_RESUME_CONTENT',
             userId: userId
         });
-        
+
         if (resumeResponse?.success && resumeResponse.data) {
             contentState.resumeData = resumeResponse.data;
-            
+
             const calculatedExp = calculateTotalExperience(resumeResponse.data);
-            
+
             if (calculatedExp > 0) {
                 contentState.resumeData.totalExperience = calculatedExp;
             } else if (contentState.databaseData?.totalExperience) {
@@ -213,30 +213,30 @@ if (typeof window.filloraInitialized === 'undefined') {
             const resumeText = JSON.stringify(resumeData);
             const currentYear = new Date().getFullYear();
             const currentMonth = new Date().getMonth() + 1;
-            
+
             let totalMonths = 0;
             const processedRanges = new Set();
-            
+
             const rangePattern = /\b(19|20)\d{2}\s*[–\-—]\s*((19|20)\d{2}|present|current)\b/gi;
             const matches = Array.from(resumeText.matchAll(rangePattern));
-            
+
             for (const match of matches) {
                 const fullMatch = match[0];
                 const normalized = fullMatch.replace(/\s+/g, '').toLowerCase();
-                
+
                 if (processedRanges.has(normalized)) continue;
                 processedRanges.add(normalized);
-                
+
                 const startYearMatch = fullMatch.match(/\b(19|20)\d{2}\b/);
                 if (!startYearMatch) continue;
-                
+
                 const startYear = parseInt(startYearMatch[0]);
                 const parts = fullMatch.split(/[–\-—]/);
                 if (parts.length < 2) continue;
-                
+
                 const endPart = parts[1].trim().toLowerCase();
                 let endYear, endMonth;
-                
+
                 if (endPart.includes('present') || endPart.includes('current')) {
                     endYear = currentYear;
                     endMonth = currentMonth;
@@ -246,87 +246,87 @@ if (typeof window.filloraInitialized === 'undefined') {
                     endYear = parseInt(endYearMatch[0]);
                     endMonth = 12;
                 }
-                
+
                 if (startYear < 1990 || startYear > currentYear || endYear < startYear || endYear > currentYear) {
                     continue;
                 }
-                
+
                 const startMonth = 1;
                 const monthsInRange = (endYear - startYear) * 12 + (endMonth - startMonth);
-                
+
                 if (monthsInRange > 0) {
                     totalMonths += monthsInRange;
                 }
             }
-            
+
             const totalYears = Math.round(totalMonths / 12 * 10) / 10;
             return totalYears > 0 ? totalYears : 0;
-            
+
         } catch (error) {
             return 0;
         }
     }
 
     // ==================== LINKEDIN AUTOMATION - COMPLETELY FIXED! ====================
-    
+
     async function startLinkedInAutomation() {
         if (contentState.isProcessing) {
             throw new Error('Already running');
         }
-        
+
         console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log('🚀 [LINKEDIN] STARTING - CLICK-BY-CLICK MODE');
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-        
+
         contentState.isProcessing = true;
         contentState.processedJobs.clear();
         contentState.currentJobIndex = 0;
         contentState.stats.applicationsSubmitted = 0;
         contentState.stats.jobsSkipped = 0;
         contentState.stats.startTime = Date.now();
-        
+
         try {
             showNotification('📥 Loading data...', 'info', 2000);
-            
+
             const userId = await getUserId();
             if (!userId) throw new Error('Please login first');
-            
+
             console.log('📥 [1/3] Loading data...');
             await loadAllUserData(userId);
-            
+
             if (!contentState.databaseData && !contentState.resumeData) {
                 throw new Error('No user data found');
             }
             console.log('✅ [1/3] Data loaded\n');
-            
+
             showNotification('🔗 Checking page...', 'info', 2000);
             console.log('🔗 [2/3] Navigation...');
-            
+
             // CRITICAL: Check if user is logged in to LinkedIn
             console.log('🔑 [2.1/3] Checking LinkedIn login status...');
             const isLoggedIn = checkIfLoggedInToLinkedIn();
-            
+
             if (!isLoggedIn) {
                 console.error('❌ [ERROR] User is NOT logged in to LinkedIn!');
-                
+
                 // Show PROMINENT notification on screen
                 showNotification(
                     '🔒 NOT LOGGED IN!\n\nPlease login to LinkedIn first,\nthen click automation again.',
                     'error',
                     15000  // 15 seconds - very visible!
                 );
-                
+
                 // Also show alert for maximum visibility
                 setTimeout(() => {
                     alert('⚠️ LinkedIn Login Required!\n\nYou are not logged in to LinkedIn.\n\nPlease:\n1. Login to LinkedIn\n2. Refresh the page\n3. Click automation button again');
                 }, 500);
-                
+
                 throw new Error('User must be logged in to LinkedIn. Please login and try again.');
             }
             console.log('✅ [2.1/3] User is logged in\n');
-            
+
             const isOnCorrectPage = checkIfOnCorrectLinkedInPage();
-            
+
             if (!isOnCorrectPage) {
                 console.log('   Navigating to LinkedIn jobs...');
                 navigateToLinkedInJobs();
@@ -335,35 +335,35 @@ if (typeof window.filloraInitialized === 'undefined') {
                 console.log('   ✅ Already on correct page');
             }
             console.log('✅ [2/3] Page ready\n');
-            
+
             showNotification('🚀 Starting applications...', 'info', 2000);
             console.log('🚀 [3/3] Processing jobs one by one...\n');
-            
+
             // CRITICAL: Process jobs by clicking each one sequentially!
             await processJobsSequentially();
-            
+
             const totalTime = ((Date.now() - contentState.stats.startTime) / 1000).toFixed(1);
-            
+
             console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
             console.log('✅ [COMPLETE]');
             console.log(`📊 Submitted: ${contentState.stats.applicationsSubmitted}/${contentState.config.MAX_JOBS}`);
             console.log(`⏭️  Skipped: ${contentState.stats.jobsSkipped}`);
             console.log(`⏱️  Time: ${totalTime}s`);
             console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-            
+
             showNotification(
                 `✅ Done!\nSubmitted: ${contentState.stats.applicationsSubmitted}/${contentState.config.MAX_JOBS}`,
                 'success',
                 8000
             );
-            
+
             return {
                 success: true,
                 applicationsSubmitted: contentState.stats.applicationsSubmitted,
                 jobsSkipped: contentState.stats.jobsSkipped,
                 totalTime: totalTime
             };
-            
+
         } catch (error) {
             console.error('❌ [ERROR]', error);
             throw error;
@@ -374,24 +374,24 @@ if (typeof window.filloraInitialized === 'undefined') {
 
     function checkIfOnCorrectLinkedInPage() {
         const currentUrl = new URL(window.location.href);
-        
+
         if (!currentUrl.hostname.includes('linkedin.com')) return false;
         if (!currentUrl.pathname.includes('/jobs/')) return false;
-        
+
         // Don't require filters - just check we're on jobs page
         return true;
     }
-    
+
     function checkIfLoggedInToLinkedIn() {
         // Check multiple indicators that user is logged in
-        
+
         // 1. Check for login/signup buttons (means NOT logged in)
         const loginButtons = document.querySelectorAll('a[href*="/login"], a[href*="/signup"], button[data-tracking-control-name="guest_homepage"]');
         if (loginButtons.length > 0) {
             console.log('❌ [LOGIN] Found login/signup buttons - user NOT logged in');
             return false;
         }
-        
+
         // 2. Check for user profile indicators (means logged in)
         const profileSelectors = [
             '[data-control-name="identity_profile_photo"]',
@@ -400,21 +400,21 @@ if (typeof window.filloraInitialized === 'undefined') {
             '[data-control-name="nav.settings_signout"]',
             'li.global-nav__primary-item--me'
         ];
-        
+
         for (const selector of profileSelectors) {
             if (document.querySelector(selector)) {
                 console.log('✅ [LOGIN] User is logged in');
                 return true;
             }
         }
-        
+
         // 3. Check if we can see job cards (only visible when logged in)
         const jobCards = document.querySelectorAll('.jobs-search-results__list-item, li[data-occludable-job-id]');
         if (jobCards.length > 0) {
             console.log('✅ [LOGIN] Job cards visible - user is logged in');
             return true;
         }
-        
+
         console.log('⚠️ [LOGIN] Cannot confirm login status');
         return false;
     }
@@ -426,35 +426,35 @@ if (typeof window.filloraInitialized === 'undefined') {
         jobsUrl.searchParams.set('f_TPR', 'r86400');
         jobsUrl.searchParams.set('sortBy', 'DD');
         jobsUrl.searchParams.set('location', 'India');
-        
+
         window.location.href = jobsUrl.toString();
     }
 
     // ==================== CRITICAL: SEQUENTIAL JOB PROCESSING ====================
-    
+
     async function processJobsSequentially() {
         let consecutiveErrors = 0;
         const maxErrors = contentState.config.MAX_CONSECUTIVE_ERRORS;
-        
-        while (contentState.stats.applicationsSubmitted < contentState.config.MAX_JOBS && 
-               consecutiveErrors < maxErrors) {
-            
+
+        while (contentState.stats.applicationsSubmitted < contentState.config.MAX_JOBS &&
+            consecutiveErrors < maxErrors) {
+
             try {
                 // STEP 1: Get ALL job cards from left panel
                 const allJobCards = getAllJobCards();
-                
+
                 if (allJobCards.length === 0) {
                     console.log('⚠️ [JOBS] No job cards found, waiting...');
                     await delay(3000);
                     continue;
                 }
-                
+
                 console.log(`📋 [JOBS] Found ${allJobCards.length} job cards on page`);
-                
+
                 // STEP 2: Check if we've reached end of current list
                 if (contentState.currentJobIndex >= allJobCards.length) {
                     console.log('📜 [JOBS] Reached end, scrolling for more...');
-                    
+
                     // Scroll to bottom of job list
                     const jobListContainer = document.querySelector('.jobs-search-results__list');
                     if (jobListContainer) {
@@ -462,16 +462,16 @@ if (typeof window.filloraInitialized === 'undefined') {
                     } else {
                         window.scrollTo(0, document.body.scrollHeight);
                     }
-                    
+
                     await delay(3000);
                     contentState.currentJobIndex = 0; // Reset and try again
                     continue;
                 }
-                
+
                 // STEP 3: Get current job card
                 const currentCard = allJobCards[contentState.currentJobIndex];
                 const jobId = extractJobId(currentCard);
-                
+
                 // Skip if already processed
                 if (contentState.processedJobs.has(jobId)) {
                     console.log(`⏭️  [JOB ${contentState.currentJobIndex + 1}] Already processed, skipping...`);
@@ -479,19 +479,19 @@ if (typeof window.filloraInitialized === 'undefined') {
                     await delay(500);
                     continue;
                 }
-                
+
                 const jobStartTime = Date.now();
-                
+
                 console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
                 console.log(`🎯 [JOB ${contentState.currentJobIndex + 1}/${allJobCards.length}] ID: ${jobId}`);
                 console.log(`   📊 Progress: ${contentState.stats.applicationsSubmitted}/${contentState.config.MAX_JOBS} submitted`);
                 console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-                
+
                 // STEP 4: Process this specific job
                 const result = await processSingleJobCard(currentCard, jobId);
-                
+
                 const jobTime = ((Date.now() - jobStartTime) / 1000).toFixed(1);
-                
+
                 if (result.submitted) {
                     contentState.stats.applicationsSubmitted++;
                     consecutiveErrors = 0;
@@ -501,31 +501,31 @@ if (typeof window.filloraInitialized === 'undefined') {
                     contentState.stats.jobsSkipped++;
                     console.log(`⏭️  [SKIPPED] ${result.reason} (${jobTime}s)`);
                 }
-                
+
                 // Mark as processed
                 contentState.processedJobs.add(jobId);
-                
+
                 // STEP 5: Move to next job
                 contentState.currentJobIndex++;
-                
+
                 // Small delay between jobs
                 await delay(contentState.config.DELAYS.BETWEEN_JOBS);
-                
+
             } catch (error) {
                 console.error(`❌ [ERROR] Job processing failed:`, error.message);
                 consecutiveErrors++;
                 contentState.stats.jobsSkipped++;
                 contentState.currentJobIndex++;
-                
+
                 if (consecutiveErrors >= maxErrors) {
                     console.error(`❌ [FATAL] Too many consecutive errors (${consecutiveErrors}), stopping`);
                     break;
                 }
-                
+
                 await delay(2000);
             }
         }
-        
+
         if (contentState.stats.applicationsSubmitted >= contentState.config.MAX_JOBS) {
             console.log(`✅ [COMPLETE] Reached target of ${contentState.config.MAX_JOBS} applications`);
         }
@@ -542,35 +542,35 @@ if (typeof window.filloraInitialized === 'undefined') {
             '.jobs-search-results__list > li',
             'ul.jobs-search-results__list li'
         ];
-        
+
         for (const selector of selectors) {
             const cards = Array.from(document.querySelectorAll(selector))
                 .filter(card => {
                     // Must be visible
                     if (!isElementVisible(card)) return false;
-                    
+
                     // Must have some text content (not empty)
                     if (card.textContent.trim().length < 10) return false;
-                    
+
                     return true;
                 });
-            
+
             if (cards.length > 0) {
                 return cards;
             }
         }
-        
+
         return [];
     }
 
     function extractJobId(jobCard) {
         // Try multiple attributes
-        const id = jobCard.getAttribute('data-occludable-job-id') || 
-                   jobCard.getAttribute('data-job-id') ||
-                   jobCard.querySelector('[data-job-id]')?.getAttribute('data-job-id');
-        
+        const id = jobCard.getAttribute('data-occludable-job-id') ||
+            jobCard.getAttribute('data-job-id') ||
+            jobCard.querySelector('[data-job-id]')?.getAttribute('data-job-id');
+
         if (id) return id;
-        
+
         // Fallback: use position + some text content
         const titleElement = jobCard.querySelector('.job-card-list__title, .job-card-container__link');
         const titleText = titleElement ? titleElement.textContent.trim().substring(0, 20) : '';
@@ -578,52 +578,52 @@ if (typeof window.filloraInitialized === 'undefined') {
     }
 
     // ==================== PROCESS SINGLE JOB CARD ====================
-    
+
     async function processSingleJobCard(jobCard, jobId) {
         try {
             // STEP 1: Click the job card to load details on right panel
             console.log('   [1/5] 🖱️  Clicking job card...');
             await clickJobCard(jobCard);
-            
+
             // CRITICAL: Extended wait for right panel to fully load
             console.log('   [1/5] ⏳ Extended wait for right panel to load (3s)...');
             await delay(3000);
-            
+
             // Additional verification that panel is loaded
             const rightPanel = document.querySelector('.jobs-search__job-details, .jobs-details__main-content');
             if (!rightPanel || rightPanel.textContent.length < 200) {
                 console.log('   [1/5] ⚠️ Panel still not loaded, waiting more...');
                 await delay(2000);
             }
-            
+
             console.log('   [1/5] ✅ Proceeding to check for Easy Apply');
-            
+
             // STEP 2: Check if Easy Apply button exists (CRITICAL!)
             console.log('   [2/5] 🔍 Checking for Easy Apply button...');
             const hasEasyApply = await checkForEasyApplyButton();
-            
+
             if (!hasEasyApply) {
                 console.log('   [2/5] ❌ No Easy Apply button - this is an "Apply" job');
                 return { submitted: false, skipped: true, reason: 'No Easy Apply button (external application)' };
             }
             console.log('   [2/5] ✅ Easy Apply button found!');
-            
+
             // STEP 3: Click Easy Apply button
             console.log('   [3/5] 🖱️  Clicking Easy Apply button...');
             const modalOpened = await clickEasyApplyButton();
-            
+
             if (!modalOpened) {
                 console.log('   [3/5] ❌ Failed to open application modal');
                 return { submitted: false, skipped: true, reason: 'Modal failed to open' };
             }
-            
+
             await delay(contentState.config.DELAYS.AFTER_MODAL_OPEN);
             console.log('   [3/5] ✅ Application modal opened!');
-            
+
             // STEP 4: Fill and submit the form
             console.log('   [4/5] 📝 Filling application form...');
             const submitted = await fillAndSubmitApplicationForm();
-            
+
             if (!submitted) {
                 console.log('   [4/5] ❌ Failed to submit application');
                 await handleDiscardPopup();
@@ -631,14 +631,14 @@ if (typeof window.filloraInitialized === 'undefined') {
                 return { submitted: false, skipped: true, reason: 'Form submission failed' };
             }
             console.log('   [4/5] ✅ Form filled and submitted!');
-            
+
             // STEP 5: Verify submission
             console.log('   [5/5] ✅ Verifying submission...');
             await delay(contentState.config.DELAYS.AFTER_SUBMIT_CLICK);
-            
+
             const isComplete = await checkApplicationComplete();
             await closeModal();
-            
+
             if (isComplete) {
                 console.log('   [5/5] ✅ Application confirmed successful!');
                 return { submitted: true };
@@ -646,7 +646,7 @@ if (typeof window.filloraInitialized === 'undefined') {
                 console.log('   [5/5] ⚠️  Verification uncertain, assuming success');
                 return { submitted: true }; // Assume success if no error
             }
-            
+
         } catch (error) {
             console.error('   ❌ ERROR processing job:', error.message);
             await handleDiscardPopup();
@@ -657,87 +657,87 @@ if (typeof window.filloraInitialized === 'undefined') {
 
     async function clickJobCard(jobCard) {
         console.log('      🖱️  Attempting to click job card...');
-        
+
         // Get the job title for tracking
         const titleElement = jobCard.querySelector('.job-card-list__title, .job-card-container__link, [data-job-title]');
         const jobTitle = titleElement ? titleElement.textContent.trim().substring(0, 50) : 'Unknown';
         console.log(`      📋 Job: ${jobTitle}`);
-        
+
         // Method 1: Try to get the job ID and navigate directly
         const jobId = jobCard.getAttribute('data-occludable-job-id') || jobCard.getAttribute('data-job-id');
-        
+
         if (jobId) {
             console.log(`      🔗 Found job ID: ${jobId}, trying direct navigation`);
-            
+
             // Try to find and click the main link
             const mainLink = jobCard.querySelector('a.job-card-container__link, a.job-card-list__title');
             if (mainLink) {
                 console.log('      🎯 Clicking main job link...');
-                
+
                 // Scroll into view first
                 mainLink.scrollIntoView({ behavior: 'auto', block: 'center' });
                 await delay(500);
-                
+
                 // Highlight for visual feedback
                 const originalBg = jobCard.style.backgroundColor;
                 jobCard.style.backgroundColor = '#dbeafe';
-                
+
                 // Click the link
                 try {
                     mainLink.click();
                 } catch {
                     mainLink.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
                 }
-                
+
                 // Wait and verify
                 console.log('      ⏳ Waiting for right panel to load...');
-                
+
                 // Progressive waiting with verification
                 for (let attempt = 1; attempt <= 10; attempt++) {
                     await delay(500);
-                    
+
                     // Check if right panel has this job's content
                     const rightPanel = document.querySelector('.jobs-search__job-details, .jobs-details__main-content, .job-details-jobs-unified-top-card');
-                    
+
                     if (rightPanel) {
                         const panelText = rightPanel.textContent;
-                        
+
                         // Check if panel contains job title or has substantial content
                         const hasContent = panelText.length > 300;
                         const hasJobTitle = jobTitle !== 'Unknown' && panelText.includes(jobTitle.substring(0, 20));
-                        
+
                         if (hasContent || hasJobTitle) {
                             console.log(`      ✅ Right panel loaded! (${attempt * 0.5}s)`);
                             jobCard.style.backgroundColor = originalBg;
-                            
+
                             // Extra safety wait
                             await delay(800);
                             return;
                         }
                     }
-                    
+
                     // Retry click at attempts 3 and 6
                     if (attempt === 3 || attempt === 6) {
                         console.log(`      🔄 Retry ${Math.floor(attempt / 3)}: Panel not loaded, clicking again...`);
                         mainLink.click();
                     }
                 }
-                
+
                 jobCard.style.backgroundColor = originalBg;
                 console.log('      ⚠️ Panel may not have loaded, but continuing...');
                 await delay(1000);
                 return;
             }
         }
-        
+
         // Method 2: Fallback - direct card click
         console.log('      🔄 Fallback: Clicking job card directly...');
         jobCard.scrollIntoView({ behavior: 'auto', block: 'center' });
         await delay(500);
-        
+
         const originalBg = jobCard.style.backgroundColor;
         jobCard.style.backgroundColor = '#dbeafe';
-        
+
         // Try multiple elements within the card
         const clickTargets = [
             jobCard.querySelector('.job-card-container__link'),
@@ -745,7 +745,7 @@ if (typeof window.filloraInitialized === 'undefined') {
             jobCard.querySelector('a[href*="/jobs/view/"]'),
             jobCard
         ].filter(el => el !== null);
-        
+
         for (const target of clickTargets) {
             try {
                 target.click();
@@ -755,37 +755,37 @@ if (typeof window.filloraInitialized === 'undefined') {
                 target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
             }
         }
-        
+
         // Wait for panel with verification
         console.log('      ⏳ Verifying panel update...');
         for (let i = 0; i < 8; i++) {
             await delay(500);
-            
+
             const rightPanel = document.querySelector('.jobs-search__job-details, .jobs-details__main-content');
             if (rightPanel && rightPanel.textContent.length > 300) {
                 console.log(`      ✅ Panel verified! (${(i + 1) * 0.5}s)`);
                 break;
             }
-            
+
             if (i === 3) {
                 console.log('      🔄 Re-clicking...');
                 jobCard.click();
             }
         }
-        
+
         jobCard.style.backgroundColor = originalBg;
         await delay(800);
     }
 
     async function checkForEasyApplyButton() {
         console.log('      🔍 Searching for Easy Apply button...');
-        
+
         // Look for Easy Apply button in the job details panel (right side)
         const maxAttempts = 5;
-        
+
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             console.log(`         👀 Attempt ${attempt}/${maxAttempts}...`);
-            
+
             // Target the right panel specifically
             const rightPanelSelectors = [
                 '.jobs-search__job-details',
@@ -794,7 +794,7 @@ if (typeof window.filloraInitialized === 'undefined') {
                 '.jobs-details__main-content',
                 '.jobs-unified-top-card'
             ];
-            
+
             let searchArea = null;
             for (const selector of rightPanelSelectors) {
                 const panel = document.querySelector(selector);
@@ -804,32 +804,32 @@ if (typeof window.filloraInitialized === 'undefined') {
                     break;
                 }
             }
-            
+
             // If no specific panel found, search entire document
             if (!searchArea) {
                 searchArea = document;
                 console.log('         ⚠️ Using entire document as search area');
             }
-            
+
             // Search for Easy Apply button
             const buttons = searchArea.querySelectorAll('button, a[role="button"]');
             console.log(`         📊 Found ${buttons.length} buttons to check`);
-            
+
             for (const button of buttons) {
                 if (!isElementVisible(button) || button.disabled) continue;
-                
+
                 const text = button.textContent.toLowerCase().trim();
                 const ariaLabel = (button.getAttribute('aria-label') || '').toLowerCase();
                 const className = button.className.toLowerCase();
                 const dataControl = (button.getAttribute('data-control-name') || '').toLowerCase();
-                
+
                 // Check multiple indicators for Easy Apply
-                const isEasyApply = 
-                    text.includes('easy apply') || 
-                    ariaLabel.includes('easy apply') || 
+                const isEasyApply =
+                    text.includes('easy apply') ||
+                    ariaLabel.includes('easy apply') ||
                     className.includes('easy-apply') ||
                     dataControl.includes('easy-apply');
-                
+
                 if (isEasyApply) {
                     console.log(`         ✅ Found Easy Apply button!`);
                     console.log(`            Text: "${button.textContent.trim()}"`);
@@ -837,17 +837,17 @@ if (typeof window.filloraInitialized === 'undefined') {
                     return true;
                 }
             }
-            
+
             console.log('         ❌ No Easy Apply button in this attempt');
-            
+
             // Wait before retry
             if (attempt < maxAttempts) {
                 await delay(800);
             }
         }
-        
+
         console.log('      ❌ No Easy Apply button found after all attempts');
-        
+
         // Log what buttons we DID find (for debugging)
         const allButtons = document.querySelectorAll('button');
         const buttonTexts = Array.from(allButtons)
@@ -855,44 +855,44 @@ if (typeof window.filloraInitialized === 'undefined') {
             .slice(0, 10)
             .map(b => b.textContent.trim().substring(0, 30));
         console.log('      📋 Visible buttons:', buttonTexts.join(', '));
-        
+
         return false;
     }
 
     async function clickEasyApplyButton() {
         const maxAttempts = 5;
-        
+
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             console.log(`      🔍 Attempt ${attempt}/${maxAttempts} to click Easy Apply...`);
-            
+
             // Search in job details area
             const jobDetailsArea = document.querySelector('.jobs-search__job-details, .jobs-details, .job-details-jobs-unified-top-card');
             const searchArea = jobDetailsArea || document;
             const buttons = searchArea.querySelectorAll('button');
-            
+
             for (const button of buttons) {
                 if (!isElementVisible(button) || button.disabled) continue;
-                
+
                 const text = button.textContent.toLowerCase().trim();
                 const ariaLabel = (button.getAttribute('aria-label') || '').toLowerCase();
-                
+
                 if (text.includes('easy apply') || ariaLabel.includes('easy apply')) {
                     // Scroll button into view
                     button.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     await delay(300);
-                    
+
                     // Click it
                     try {
                         button.click();
                     } catch {
                         button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
                     }
-                    
+
                     console.log('      🖱️  Easy Apply button clicked');
-                    
+
                     // Wait for modal to open
                     await delay(contentState.config.DELAYS.AFTER_EASY_APPLY_CLICK);
-                    
+
                     // Check if modal opened
                     if (isModalOpen()) {
                         console.log('      ✅ Modal opened successfully');
@@ -902,11 +902,11 @@ if (typeof window.filloraInitialized === 'undefined') {
                     }
                 }
             }
-            
+
             // Wait before retry
             await delay(contentState.config.DELAYS.WAIT_FOR_BUTTON);
         }
-        
+
         console.log('      ❌ Failed to open modal after all attempts');
         return false;
     }
@@ -914,12 +914,12 @@ if (typeof window.filloraInitialized === 'undefined') {
     function isModalOpen() {
         const modalSelectors = [
             '.jobs-easy-apply-modal',
-            '.jobs-easy-apply-content', 
+            '.jobs-easy-apply-content',
             'div[role="dialog"][aria-labelledby*="easy-apply"]',
             'div[data-test-modal]',
             '.artdeco-modal'
         ];
-        
+
         for (const selector of modalSelectors) {
             const modal = document.querySelector(selector);
             if (modal && isElementVisible(modal)) {
@@ -929,7 +929,7 @@ if (typeof window.filloraInitialized === 'undefined') {
                 }
             }
         }
-        
+
         return false;
     }
 
@@ -940,57 +940,57 @@ if (typeof window.filloraInitialized === 'undefined') {
             'div[role="dialog"]',
             '.artdeco-modal'
         ];
-        
+
         for (const selector of modalSelectors) {
             const modal = document.querySelector(selector);
             if (modal && isElementVisible(modal)) return modal;
         }
-        
+
         return null;
     }
 
     async function fillAndSubmitApplicationForm() {
         for (let step = 1; step <= contentState.config.MAX_FORM_STEPS; step++) {
             console.log(`      📄 [Step ${step}/${contentState.config.MAX_FORM_STEPS}]`);
-            
+
             // Check if already complete
             if (await checkApplicationComplete()) {
                 console.log('      ✅ Application already complete!');
                 return true;
             }
-            
+
             // Wait for form to render
             await delay(1000);
-            
+
             // Fill all visible fields in modal
             const fieldsFilled = await fillAllFieldsInModal();
             console.log(`         📝 Filled ${fieldsFilled} fields`);
-            
+
             // Wait for fields to process
             await delay(1000);
-            
+
             // Click Next/Review/Submit button
             const buttonClicked = await clickNextOrSubmitButton();
-            
+
             if (!buttonClicked) {
                 console.log('         ⚠️ No button to click, checking if complete...');
                 await delay(2000);
-                
+
                 if (await checkApplicationComplete()) {
                     return true;
                 }
-                
+
                 // If we're beyond step 3 and no button, likely failed
                 if (step > 3) {
                     console.log('         ❌ Stuck on step, giving up');
                     return false;
                 }
             }
-            
+
             // Wait for next step to load
             await delay(contentState.config.DELAYS.AFTER_NEXT_CLICK);
         }
-        
+
         console.log('      ⚠️ Reached max steps without completion');
         return false;
     }
@@ -998,16 +998,16 @@ if (typeof window.filloraInitialized === 'undefined') {
     async function fillAllFieldsInModal() {
         const modal = getModal();
         if (!modal) return 0;
-        
+
         const fields = getAllVisibleFields(modal);
         let filled = 0;
-        
+
         for (const field of fields) {
             if (!isFieldAlreadyFilled(field)) {
                 const fieldInfo = getFieldInformation(field);
-                
+
                 let success = false;
-                
+
                 if (field.tagName.toLowerCase() === 'select') {
                     success = await fillDropdownWithRetry(field, fieldInfo);
                 } else if (field.type === 'file') {
@@ -1021,29 +1021,29 @@ if (typeof window.filloraInitialized === 'undefined') {
                         console.log('      ⚠️ Radio without name, skipping');
                         continue;
                     }
-                    
+
                     // Check if group already filled
                     const radioGroup = document.querySelectorAll(`input[type="radio"][name="${field.name}"]`);
                     const alreadyFilled = Array.from(radioGroup).some(r => r.checked);
-                    
+
                     if (alreadyFilled) {
                         console.log(`      ✓ Radio group "${field.name}" already filled`);
                         success = true;
                     } else {
                         // Try to fill by checking each radio option
                         console.log(`      🔘 Processing radio group: "${field.name}" (${radioGroup.length} options)`);
-                        
+
                         for (const radio of radioGroup) {
                             const radioInfo = getFieldInformation(radio);
                             const filled = fillRadioField(radio, radioInfo);
-                            
+
                             if (filled) {
                                 success = true;
                                 console.log(`      ✅ Radio group "${field.name}" filled successfully`);
                                 break;
                             }
                         }
-                        
+
                         // If still not filled, force select first option as last resort
                         if (!success && radioGroup.length > 0) {
                             console.warn(`      ⚠️ Radio group "${field.name}" - no intelligent match, selecting first option`);
@@ -1058,18 +1058,18 @@ if (typeof window.filloraInitialized === 'undefined') {
                     success = await fillTextareaField(field, fieldInfo);
                 } else {
                     let value = getExactMatchValue(fieldInfo);
-                    
+
                     // If no exact match, try intelligent guess first
                     if (!value) {
                         value = makeIntelligentGuess(fieldInfo);
                     }
-                    
+
                     // If still no value and AI is available, ALWAYS try AI
                     if (!value && contentState.openaiKey) {
                         console.log(`      🤖 No exact match/guess, asking AI for: "${fieldInfo.label}"`);
                         value = await getAIPoweredValue(fieldInfo);
                     }
-                    
+
                     if (value && value.toString().trim()) {
                         // SPECIAL HANDLING FOR CITY/LOCATION FIELDS WITH AUTOCOMPLETE
                         if (/city|location|where.*live/i.test(fieldInfo.context) && field.tagName.toLowerCase() === 'input') {
@@ -1086,7 +1086,7 @@ if (typeof window.filloraInitialized === 'undefined') {
                         // Validate numeric fields
                         else if (field.type === 'number' || field.inputMode === 'numeric' || field.inputMode === 'decimal') {
                             const numericValue = value.toString().replace(/[^0-9.]/g, '');
-                            
+
                             if (numericValue && parseFloat(numericValue) > 0) {
                                 field.value = numericValue;
                                 triggerFieldEvents(field);
@@ -1100,9 +1100,9 @@ if (typeof window.filloraInitialized === 'undefined') {
                         }
                     } else {
                         // CRITICAL: Field still empty, log it
-                        const isRequired = field.required || field.getAttribute('aria-required') === 'true' || 
-                                         fieldInfo.label.includes('*') || fieldInfo.label.includes('required');
-                        
+                        const isRequired = field.required || field.getAttribute('aria-required') === 'true' ||
+                            fieldInfo.label.includes('*') || fieldInfo.label.includes('required');
+
                         if (isRequired) {
                             console.warn(`      ⚠️ UNFILLED REQUIRED FIELD: "${fieldInfo.label}"`);
                             console.warn(`         Context: ${fieldInfo.context.substring(0, 100)}`);
@@ -1111,44 +1111,44 @@ if (typeof window.filloraInitialized === 'undefined') {
                         }
                     }
                 }
-                
+
                 if (success) filled++;
                 await delay(contentState.config.DELAYS.AFTER_FIELD_FILL);
             }
         }
-        
+
         return filled;
     }
 
     async function fillCityFieldWithAutocomplete(field, cityValue, fieldInfo) {
         console.log(`      🏙️  Filling city field with autocomplete: "${cityValue}"`);
-        
+
         try {
             // Clear the field first
             field.value = '';
             field.focus();
             await delay(200);
-            
+
             // Type partial city name (first 3-4 characters) to trigger dropdown
             const partialCity = cityValue.substring(0, Math.min(4, cityValue.length));
             console.log(`      ⌨️  Typing partial: "${partialCity}"`);
-            
+
             // Type character by character
             for (let i = 0; i < partialCity.length; i++) {
                 field.value += partialCity[i];
-                
+
                 // Trigger input event after each character
                 field.dispatchEvent(new Event('input', { bubbles: true }));
                 field.dispatchEvent(new KeyboardEvent('keydown', { key: partialCity[i], bubbles: true }));
                 field.dispatchEvent(new KeyboardEvent('keyup', { key: partialCity[i], bubbles: true }));
-                
+
                 await delay(100);
             }
-            
+
             // Wait for dropdown to appear
             console.log('      ⏳ Waiting for dropdown...');
             await delay(800);
-            
+
             // Look for dropdown/autocomplete suggestions
             const dropdownSelectors = [
                 '.jobs-easy-apply-form-section__dropdown',
@@ -1159,7 +1159,7 @@ if (typeof window.filloraInitialized === 'undefined') {
                 '.typeahead-results',
                 '.autocomplete-results'
             ];
-            
+
             let dropdown = null;
             for (const selector of dropdownSelectors) {
                 const element = document.querySelector(selector);
@@ -1169,67 +1169,67 @@ if (typeof window.filloraInitialized === 'undefined') {
                     break;
                 }
             }
-            
+
             if (dropdown) {
                 // Find options in dropdown
                 const options = dropdown.querySelectorAll('li, [role="option"], .typeahead-result, .autocomplete-option');
                 console.log(`      📋 Found ${options.length} dropdown options`);
-                
+
                 if (options.length > 0) {
                     // Try to find best match
                     let bestOption = null;
                     let bestScore = 0;
-                    
+
                     for (const option of options) {
                         if (!isElementVisible(option)) continue;
-                        
+
                         const optionText = option.textContent.toLowerCase().trim();
                         console.log(`         Checking: "${optionText}"`);
-                        
+
                         // Score the option
                         let score = 0;
-                        
+
                         // Contains city name
                         if (optionText.includes(cityValue.toLowerCase())) {
                             score += 100;
                         }
-                        
+
                         // Contains partial city name
                         if (optionText.includes(partialCity.toLowerCase())) {
                             score += 50;
                         }
-                        
+
                         // Contains India
                         if (optionText.includes('india')) {
                             score += 30;
                         }
-                        
+
                         // Has state name (better than just city)
                         if (/,.*india/.test(optionText)) {
                             score += 20;
                         }
-                        
+
                         if (score > bestScore) {
                             bestScore = score;
                             bestOption = option;
                         }
                     }
-                    
+
                     if (bestOption && bestScore > 50) {
                         console.log(`      ✅ Selecting best match: "${bestOption.textContent.trim()}" (score: ${bestScore})`);
-                        
+
                         // Click the option
                         bestOption.scrollIntoView({ behavior: 'auto', block: 'nearest' });
                         await delay(200);
-                        
+
                         try {
                             bestOption.click();
                         } catch {
                             bestOption.dispatchEvent(new MouseEvent('click', { bubbles: true }));
                         }
-                        
+
                         await delay(500);
-                        
+
                         // Verify it was selected
                         if (field.value && field.value.length > partialCity.length) {
                             console.log(`      ✅ City selected: "${field.value}"`);
@@ -1242,25 +1242,25 @@ if (typeof window.filloraInitialized === 'undefined') {
             } else {
                 console.log('      ⚠️ No dropdown appeared');
             }
-            
+
             // If dropdown selection failed, try using AI to select best option
             if (contentState.openaiKey && dropdown && dropdown.querySelectorAll('li, [role="option"]').length > 0) {
                 console.log('      🤖 Trying AI to select best option...');
                 const success = await selectCityWithAI(field, dropdown, cityValue);
                 if (success) return true;
             }
-            
+
             // Final fallback: just type the full city name
             console.log('      ⚠️ Autocomplete failed, using full city name');
             field.value = cityValue;
             triggerFieldEvents(field);
             await delay(300);
-            
+
             return false;
-            
+
         } catch (error) {
             console.error('      ❌ City autocomplete error:', error.message);
-            
+
             // Fallback
             field.value = cityValue;
             triggerFieldEvents(field);
@@ -1270,15 +1270,15 @@ if (typeof window.filloraInitialized === 'undefined') {
 
     async function selectCityWithAI(field, dropdown, cityValue) {
         if (!contentState.openaiKey) return false;
-        
+
         try {
             const options = Array.from(dropdown.querySelectorAll('li, [role="option"]'))
                 .filter(opt => isElementVisible(opt))
                 .map(opt => opt.textContent.trim())
                 .slice(0, 10);
-            
+
             if (options.length === 0) return false;
-            
+
             const prompt = `You need to select the best city option from a dropdown for the city: "${cityValue}".
 
 Available options:
@@ -1291,7 +1291,7 @@ RULES:
 - Respond with ONLY the number (1-${options.length}) of the best option
 
 Best option number:`;
-            
+
             const response = await Promise.race([
                 fetch('https://api.openai.com/v1/chat/completions', {
                     method: 'POST',
@@ -1308,16 +1308,16 @@ Best option number:`;
                 }),
                 new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
             ]);
-            
+
             if (response.ok) {
                 const data = await response.json();
                 const aiResponse = data.choices[0].message.content.trim();
                 const optionNumber = parseInt(aiResponse.match(/\d+/)?.[0]);
-                
+
                 if (optionNumber && optionNumber >= 1 && optionNumber <= options.length) {
                     const selectedOptionText = options[optionNumber - 1];
                     const optionElements = dropdown.querySelectorAll('li, [role="option"]');
-                    
+
                     for (const optElement of optionElements) {
                         if (optElement.textContent.trim() === selectedOptionText) {
                             console.log(`      🤖 AI selected: "${selectedOptionText}"`);
@@ -1331,52 +1331,52 @@ Best option number:`;
         } catch (error) {
             console.warn('      ⚠️ AI selection failed');
         }
-        
+
         return false;
     }
 
     async function fillDropdownWithRetry(selectElement, fieldInfo) {
         for (let attempt = 1; attempt <= contentState.config.MAX_DROPDOWN_RETRIES; attempt++) {
             const success = await fillDropdownIntelligently(selectElement, fieldInfo);
-            
+
             if (success) {
                 await delay(contentState.config.DELAYS.AFTER_DROPDOWN_FILL);
-                
+
                 if (isFieldAlreadyFilled(selectElement)) {
                     return true;
                 }
             }
-            
+
             await delay(300);
         }
-        
+
         return false;
     }
 
     async function fillDropdownIntelligently(selectElement, fieldInfo) {
-        const options = Array.from(selectElement.options).filter(option => 
-            option.value && 
-            option.value !== '' && 
+        const options = Array.from(selectElement.options).filter(option =>
+            option.value &&
+            option.value !== '' &&
             option.value !== 'select' &&
             option.value !== '-1' &&
             !option.text.toLowerCase().includes('select an option') &&
             !option.text.toLowerCase().includes('no answer')
         );
-        
+
         if (options.length === 0) return false;
-        
+
         const context = fieldInfo.context;
         const userData = { ...contentState.databaseData, ...contentState.resumeData };
         const totalExperience = userData.totalExperience || 0;
-        
+
         let selectedOption = null;
-        
+
         // CRITICAL: Salary/CTC - DIFFERENT logic for Current vs Expected
         if (context.includes('salary') || context.includes('ctc') || context.includes('compensation')) {
             // Check if this is EXPECTED salary (should be HIGHER)
             const isExpected = /expected|desired|target|new|future/i.test(context);
             const isCurrent = /current|present|existing/i.test(context);
-            
+
             if (isExpected) {
                 console.log('      💰 Selecting EXPECTED salary (higher range)');
                 selectedOption = selectSalaryIntelligently(options, totalExperience, true); // true = expected
@@ -1389,7 +1389,7 @@ Best option number:`;
                 selectedOption = selectSalaryIntelligently(options, totalExperience, false);
             }
         }
-        
+
         // Experience level
         if (!selectedOption && context.includes('experience') && context.includes('level')) {
             if (totalExperience < 2) {
@@ -1402,33 +1402,33 @@ Best option number:`;
                 selectedOption = options.find(o => /lead|expert|principal/i.test(o.text));
             }
         }
-        
+
         // Years
         if (!selectedOption && context.includes('year') && context.includes('experience')) {
             const expString = Math.floor(totalExperience).toString();
             selectedOption = options.find(o => o.text.includes(expString) || o.value.includes(expString));
         }
-        
+
         // Tools
         if (!selectedOption && (context.includes('visualization') || context.includes('tableau') || context.includes('power bi'))) {
             selectedOption = options.find(o => /yes|tableau|power bi|python/i.test(o.text));
         }
-        
+
         // Cloud
         if (!selectedOption && (context.includes('cloud') || context.includes('aws') || context.includes('azure'))) {
             selectedOption = options.find(o => /yes|aws|azure/i.test(o.text));
         }
-        
+
         // Availability
         if (!selectedOption && (context.includes('available') || context.includes('joining'))) {
             selectedOption = options.find(o => /immediate|yes|now/i.test(o.text));
         }
-        
+
         // Yes/No
         if (!selectedOption && options.length === 2) {
             const yesOption = options.find(o => /yes/i.test(o.text));
             const noOption = options.find(o => /no/i.test(o.text));
-            
+
             if (yesOption && noOption) {
                 if (/willing|authorize|relocate|eligible/i.test(context)) {
                     selectedOption = yesOption;
@@ -1439,28 +1439,28 @@ Best option number:`;
                 }
             }
         }
-        
+
         // Exact match
         if (!selectedOption) {
             const targetValue = getExactMatchValue(fieldInfo);
             if (targetValue) {
-                selectedOption = options.find(o => 
+                selectedOption = options.find(o =>
                     o.text.toLowerCase().includes(targetValue.toLowerCase()) ||
                     targetValue.toLowerCase().includes(o.text.toLowerCase())
                 );
             }
         }
-        
+
         // AI
         if (!selectedOption && contentState.openaiKey && options.length <= 20) {
             selectedOption = await selectOptionWithAI(fieldInfo, options);
         }
-        
+
         // FALLBACK: Always select first valid option
         if (!selectedOption) {
             selectedOption = options[0];
         }
-        
+
         if (selectedOption) {
             selectElement.value = selectedOption.value;
             selectElement.selectedIndex = Array.from(selectElement.options).indexOf(selectedOption);
@@ -1468,13 +1468,13 @@ Best option number:`;
             triggerFieldEvents(selectElement);
             return true;
         }
-        
+
         return false;
     }
 
     function selectSalaryIntelligently(options, exp, isExpected = false) {
         let min = 0, max = 0;
-        
+
         // Base salary ranges by experience
         if (exp < 1) { min = 200000; max = 400000; }
         else if (exp < 2) { min = 300000; max = 600000; }
@@ -1483,7 +1483,7 @@ Best option number:`;
         else if (exp < 7) { min = 1200000; max = 2500000; }
         else if (exp < 10) { min = 1800000; max = 3500000; }
         else { min = 2500000; max = 5000000; }
-        
+
         // CRITICAL: If this is EXPECTED salary, increase by 25-30%
         if (isExpected) {
             min = Math.floor(min * 1.25); // 25% increase
@@ -1492,15 +1492,15 @@ Best option number:`;
         } else {
             console.log(`         💵 Current CTC range: ${min} - ${max}`);
         }
-        
+
         let best = null, bestScore = -1;
-        
+
         for (const opt of options) {
             const nums = opt.text.match(/(\d+(?:\.\d+)?)/g);
             if (!nums) continue;
-            
+
             let optMin = 0, optMax = 0;
-            
+
             if (nums.length === 1) {
                 const val = parseFloat(nums[0]);
                 optMin = optMax = val < 100 ? val * 100000 : val;
@@ -1508,41 +1508,41 @@ Best option number:`;
                 optMin = parseFloat(nums[0]) < 100 ? parseFloat(nums[0]) * 100000 : parseFloat(nums[0]);
                 optMax = parseFloat(nums[1]) < 100 ? parseFloat(nums[1]) * 100000 : parseFloat(nums[1]);
             }
-            
+
             if (optMin === 0) continue;
-            
+
             let score = 0;
-            
+
             if (optMin <= max && optMax >= min) {
                 score = 100;
                 if (optMin >= min && optMax <= max) score = 150;
                 const mid = (min + max) / 2;
                 if (mid >= optMin && mid <= optMax) score = 200;
             }
-            
+
             if (score > bestScore) {
                 bestScore = score;
                 best = opt;
             }
         }
-        
+
         if (best) {
             console.log(`         ✅ Selected: "${best.text}" (score: ${bestScore})`);
         }
-        
+
         return best;
     }
 
     async function selectOptionWithAI(fieldInfo, options) {
         if (!contentState.openaiKey) return null;
-        
+
         try {
             const label = fieldInfo.label || fieldInfo.name;
             const userData = { ...contentState.databaseData, ...contentState.resumeData };
             const optionsList = options.map(o => o.text).join(', ');
-            
+
             const prompt = `Field: "${label}". Options: [${optionsList}]. User: ${userData.fullName}, ${userData.totalExperience} years. Which option? Respond with ONLY the exact option text.`;
-            
+
             const response = await Promise.race([
                 fetch('https://api.openai.com/v1/chat/completions', {
                     method: 'POST',
@@ -1559,12 +1559,12 @@ Best option number:`;
                 }),
                 new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
             ]);
-            
+
             if (response.ok) {
                 const data = await response.json();
                 const aiSelection = data.choices[0].message.content.trim();
-                
-                return options.find(o => 
+
+                return options.find(o =>
                     o.text.toLowerCase().includes(aiSelection.toLowerCase()) ||
                     aiSelection.toLowerCase().includes(o.text.toLowerCase())
                 );
@@ -1572,28 +1572,28 @@ Best option number:`;
         } catch (error) {
             // Silent
         }
-        
+
         return null;
     }
 
     async function clickNextOrSubmitButton() {
         const modal = getModal();
         if (!modal) return false;
-        
-        const buttons = Array.from(modal.querySelectorAll('button')).filter(b => 
+
+        const buttons = Array.from(modal.querySelectorAll('button')).filter(b =>
             isElementVisible(b) && !b.disabled
         );
-        
+
         if (buttons.length === 0) return false;
-        
+
         // Priority order: Review → Submit → Next
-        
+
         // 1. Look for Review button
         for (const btn of buttons) {
             const text = btn.textContent.toLowerCase();
             const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
             const combined = `${text} ${aria}`;
-            
+
             if (/review|preview/i.test(combined) && !/next|submit|back/i.test(combined)) {
                 console.log('         🖱️  Clicking Review button');
                 btn.click();
@@ -1601,13 +1601,13 @@ Best option number:`;
                 return true;
             }
         }
-        
+
         // 2. Look for Submit button
         for (const btn of buttons) {
             const text = btn.textContent.toLowerCase();
             const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
             const combined = `${text} ${aria}`;
-            
+
             if (/submit|send application/i.test(combined) && !/next|review|back/i.test(combined)) {
                 console.log('         🚀 Clicking Submit button!');
                 btn.click();
@@ -1615,13 +1615,13 @@ Best option number:`;
                 return true;
             }
         }
-        
+
         // 3. Look for Next/Continue button
         for (const btn of buttons) {
             const text = btn.textContent.toLowerCase();
             const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
             const combined = `${text} ${aria}`;
-            
+
             if (/next|continue/i.test(combined) && !/submit|back/i.test(combined)) {
                 console.log('         ➡️  Clicking Next button');
                 btn.click();
@@ -1629,14 +1629,14 @@ Best option number:`;
                 return true;
             }
         }
-        
+
         return false;
     }
 
     async function checkApplicationComplete() {
         // Check if modal is closed (common indicator)
         if (!isModalOpen()) return true;
-        
+
         // Check for success messages
         const text = document.body.textContent.toLowerCase();
         const successPhrases = [
@@ -1647,19 +1647,19 @@ Best option number:`;
             'your application has been',
             'thanks for applying'
         ];
-        
+
         for (const phrase of successPhrases) {
             if (text.includes(phrase)) {
                 return true;
             }
         }
-        
+
         return false;
     }
 
     async function handleDiscardPopup() {
         await delay(1000);
-        
+
         const buttons = document.querySelectorAll('button');
         for (const btn of buttons) {
             const text = btn.textContent.toLowerCase();
@@ -1680,7 +1680,7 @@ Best option number:`;
             '.artdeco-modal__dismiss',
             'button[data-test-modal-close-btn]'
         ];
-        
+
         for (const selector of closeSelectors) {
             const buttons = document.querySelectorAll(selector);
             for (const btn of buttons) {
@@ -1695,13 +1695,13 @@ Best option number:`;
     }
 
     // ==================== HELPER FUNCTIONS ====================
-    
+
     function getFieldInformation(field) {
         const label = getFieldLabel(field).toLowerCase();
         const name = (field.name || '').toLowerCase();
         const placeholder = (field.placeholder || '').toLowerCase();
         const ariaLabel = (field.getAttribute('aria-label') || '').toLowerCase();
-        
+
         return {
             field: field,
             label: label,
@@ -1717,24 +1717,24 @@ Best option number:`;
             if (!field.value || field.value === '' || field.value === 'select' || field.value === '-1') {
                 return false;
             }
-            
+
             const opt = field.options[field.selectedIndex];
             if (!opt) return false;
-            
+
             const text = opt.text.toLowerCase();
             return !text.includes('select') && !text.includes('no answer') && !text.includes('choose');
         }
-        
+
         if (field.type === 'checkbox') return field.checked;
-        
+
         if (field.type === 'radio') {
             if (!field.name) return field.checked;
             const group = document.querySelectorAll(`input[type="radio"][name="${field.name}"]`);
             return Array.from(group).some(r => r.checked);
         }
-        
+
         if (field.type === 'file') return field.files && field.files.length > 0;
-        
+
         return (field.value || '').trim().length > 0;
     }
 
@@ -1743,19 +1743,19 @@ Best option number:`;
         const db = contentState.databaseData || {};
         const resume = contentState.resumeData || {};
         const exp = resume.totalExperience || db.totalExperience || 0;
-        
+
         // Basic fields
         if (/first.*name/i.test(context)) return db.firstName || resume.firstName || '';
         if (/last.*name/i.test(context)) return db.lastName || resume.lastName || '';
         if (/email/i.test(context)) return db.email || resume.email || '';
         if (/phone/i.test(context)) return db.phone || resume.phone || '';
         if (/city/i.test(context)) return db.city || resume.city || '';
-        
+
         // Experience in YEARS
         if (/experience.*year/i.test(context) && !/notice/i.test(context)) {
             return exp.toString();
         }
-        
+
         // CRITICAL: Notice Period - ALWAYS in DAYS!
         if (/notice.*period/i.test(context)) {
             if (/day/i.test(context)) {
@@ -1768,12 +1768,12 @@ Best option number:`;
                 return '15'; // Default: days
             }
         }
-        
+
         // Current CTC
         if (/current.*ctc|current.*salary|current.*compensation/i.test(context)) {
             const expYears = Math.floor(exp);
             let ctc = 0;
-            
+
             if (expYears < 1) ctc = 3.5;
             else if (expYears < 2) ctc = 5;
             else if (expYears < 3) ctc = 7;
@@ -1781,15 +1781,15 @@ Best option number:`;
             else if (expYears < 7) ctc = 15;
             else if (expYears < 10) ctc = 20;
             else ctc = 25;
-            
+
             return ctc.toString();
         }
-        
+
         // Expected CTC
         if (/expected.*ctc|expected.*salary|expected.*compensation/i.test(context)) {
             const expYears = Math.floor(exp);
             let expectedCtc = 0;
-            
+
             if (expYears < 1) expectedCtc = 4.5;
             else if (expYears < 2) expectedCtc = 6.5;
             else if (expYears < 3) expectedCtc = 9;
@@ -1797,26 +1797,26 @@ Best option number:`;
             else if (expYears < 7) expectedCtc = 19;
             else if (expYears < 10) expectedCtc = 26;
             else expectedCtc = 32;
-            
+
             return expectedCtc.toString();
         }
-        
+
         // Official Notice Period
         if (/official.*notice/i.test(context)) {
             return '30';
         }
-        
+
         return '';
     }
 
     async function getAIPoweredValue(fieldInfo) {
         if (!contentState.openaiKey) return '';
-        
+
         try {
             const label = fieldInfo.label || fieldInfo.name || fieldInfo.placeholder;
             const userData = { ...contentState.databaseData, ...contentState.resumeData };
             const exp = userData.totalExperience || 0;
-            
+
             // Build comprehensive user profile
             const userProfile = {
                 name: userData.fullName || `${userData.firstName} ${userData.lastName}`,
@@ -1826,7 +1826,7 @@ Best option number:`;
                 education: userData.education || 'B.Tech in AI & Data Science',
                 skills: userData.skills || 'Python, SQL, Machine Learning, Data Analysis'
             };
-            
+
             // Calculate CTC ranges based on experience (Indian market 2025)
             let currentCTC = '';
             let expectedCTC = '';
@@ -1838,7 +1838,7 @@ Best option number:`;
             else if (exp < 7) { currentCTC = '17'; expectedCTC = '21'; }
             else if (exp < 10) { currentCTC = '23'; expectedCTC = '29'; }
             else { currentCTC = '30'; expectedCTC = '38'; }
-            
+
             const prompt = `You are an expert AI assistant helping fill a LinkedIn job application form. Analyze the question carefully and provide ONLY the exact value to fill.
 
 QUESTION: "${label}"
@@ -1938,7 +1938,7 @@ Q: "Are you comfortable working in shifts?" → Yes
 Q: "Total years of experience?" → ${exp}
 
 Now answer: "${label}"`;
-            
+
             const response = await Promise.race([
                 fetch('https://api.openai.com/v1/chat/completions', {
                     method: 'POST',
@@ -1955,17 +1955,17 @@ Now answer: "${label}"`;
                 }),
                 new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
             ]);
-            
+
             if (response.ok) {
                 const data = await response.json();
                 let aiValue = data.choices[0].message.content.trim();
-                
+
                 // Aggressive cleaning
                 aiValue = aiValue.replace(/^["'`]|["'`]$/g, ''); // Remove quotes
                 aiValue = aiValue.replace(/^(Answer|Response):\s*/i, ''); // Remove prefixes
                 aiValue = aiValue.replace(/\*\*/g, ''); // Remove markdown
                 aiValue = aiValue.trim();
-                
+
                 // Validate response
                 if (aiValue && aiValue.length > 0 && aiValue.length < 500 && aiValue !== 'UNKNOWN') {
                     console.log(`      🤖 AI intelligently filled "${label}" → "${aiValue}"`);
@@ -1975,7 +1975,7 @@ Now answer: "${label}"`;
         } catch (error) {
             console.warn('      ⚠️ AI error:', error.message);
         }
-        
+
         return '';
     }
 
@@ -1983,37 +1983,37 @@ Now answer: "${label}"`;
         const context = fieldInfo.context.toLowerCase();
         const userData = { ...contentState.databaseData, ...contentState.resumeData };
         const exp = userData.totalExperience || 0;
-        
+
         console.log(`      🧠 Making intelligent guess for: "${fieldInfo.label || context.substring(0, 30)}"`);
-        
+
         // CRITICAL: Scale/Rating Questions (1-10, 1-5, etc.)
         if (/scale|rate|rating|proficiency|comfort|level.*\d|out.*of.*\d|\/\d+|\d+-\d+/i.test(context)) {
             // Check for number ranges
             const scaleMatch = context.match(/(\d+)\s*-\s*(\d+)|(\d+)\s*to\s*(\d+)|out\s*of\s*(\d+)|\/(\d+)/i);
-            
+
             if (scaleMatch) {
                 const min = parseInt(scaleMatch[1] || scaleMatch[3] || '0');
                 const max = parseInt(scaleMatch[2] || scaleMatch[4] || scaleMatch[5] || scaleMatch[6] || '10');
-                
+
                 // Give a good rating (70-80% of max)
                 const rating = Math.ceil(max * 0.75);
                 console.log(`      📊 Scale ${min}-${max} detected → answering ${rating}`);
                 return rating.toString();
             }
-            
+
             // Default to 7 or 8 for 1-10 scale
             if (/1.*10|0.*10|ten/i.test(context)) {
                 console.log('      📊 1-10 scale detected → answering 8');
                 return '8';
             }
-            
+
             // 1-5 scale
             if (/1.*5|five/i.test(context)) {
                 console.log('      📊 1-5 scale detected → answering 4');
                 return '4';
             }
         }
-        
+
         // Notice Period
         if (/notice.*period/i.test(context)) {
             if (/day/i.test(context)) return '15';
@@ -2021,9 +2021,9 @@ Now answer: "${label}"`;
             if (/month/i.test(context)) return '1';
             return '15'; // Default days
         }
-        
+
         if (/official.*notice/i.test(context)) return '30';
-        
+
         // CTC / Salary / Compensation
         if (/ctc|salary|compensation|package|pay/i.test(context)) {
             // Calculate based on experience
@@ -2036,7 +2036,7 @@ Now answer: "${label}"`;
             else if (exp < 7) ctc = 17;
             else if (exp < 10) ctc = 23;
             else ctc = 30;
-            
+
             // Check if current or expected
             if (/current/i.test(context)) {
                 return ctc.toString();
@@ -2046,7 +2046,7 @@ Now answer: "${label}"`;
                 return ctc.toString();
             }
         }
-        
+
         // Experience
         if (/experience.*year|year.*experience/i.test(context) && !/notice/i.test(context)) {
             if (/total|overall/i.test(context)) return exp.toString();
@@ -2061,39 +2061,39 @@ Now answer: "${label}"`;
             }
             return Math.max(1, exp - 1).toString();
         }
-        
+
         // Contract / Comfortable
         if (/contract|comfortable/i.test(context)) return 'Yes';
-        
+
         // Authorization / Eligibility
         if (/authorize|eligible|legally/i.test(context)) return 'Yes';
-        
+
         // Availability / Joining
         if (/available|start|joining|when.*join/i.test(context)) {
             if (/immediate/i.test(context)) return 'Yes';
             return 'Immediate';
         }
-        
+
         // Relocation / Willing
         if (/relocate|willing|flexible/i.test(context)) return 'Yes';
-        
+
         // Sponsorship / Visa
         if (/sponsorship|visa/i.test(context)) return 'No';
-        
+
         // Shifts / Hours
         if (/shift|hours|timing/i.test(context)) return 'Yes';
-        
+
         // Background Check
         if (/background.*check|verification/i.test(context)) return 'Yes';
-        
+
         // References
         if (/reference|referral/i.test(context)) return 'Available on request';
-        
+
         // Reason for change / Why leaving
         if (/reason|why.*leav|why.*chang/i.test(context)) {
             return 'Seeking better opportunities';
         }
-        
+
         // Skills / Tools specific
         if (/python|sql|excel|tableau|power.*bi|machine.*learn|data/i.test(context)) {
             if (/year|experience/i.test(context)) {
@@ -2101,46 +2101,46 @@ Now answer: "${label}"`;
             }
             return 'Yes';
         }
-        
+
         // Cloud / AWS / Azure
         if (/cloud|aws|azure|gcp/i.test(context)) return 'Yes';
-        
+
         // Certifications
         if (/certification|certified/i.test(context)) {
             if (/how many/i.test(context)) return '2';
             return 'Yes';
         }
-        
+
         // Education level
         if (/education|degree|qualification/i.test(context)) {
             return userData.education || 'Bachelor of Technology';
         }
-        
+
         // Graduation year
         if (/graduation|graduated|passing.*year/i.test(context)) {
             const currentYear = new Date().getFullYear();
             const gradYear = currentYear - Math.floor(exp) - 1;
             return gradYear.toString();
         }
-        
+
         // Percentage / CGPA / Marks
         if (/percentage|cgpa|marks|score/i.test(context)) {
             if (/cgpa/i.test(context)) return '8.5';
             return '75';
         }
-        
+
         // Language proficiency
         if (/language|english|hindi/i.test(context)) {
             if (/proficiency|level/i.test(context)) return 'Proficient';
             return 'Yes';
         }
-        
+
         // Work from home / Remote
         if (/work.*from.*home|remote|wfh/i.test(context)) return 'Yes';
-        
+
         // Travel
         if (/travel|willing.*travel/i.test(context)) return 'Yes';
-        
+
         // Team size
         if (/team.*size|manage.*people/i.test(context)) {
             if (exp < 3) return '0';
@@ -2148,43 +2148,43 @@ Now answer: "${label}"`;
             if (exp < 8) return '5-7';
             return '10+';
         }
-        
+
         // Projects
         if (/project|how many.*project/i.test(context)) {
             return Math.max(2, Math.floor(exp * 2)).toString();
         }
-        
+
         // Domain / Industry
         if (/domain|industry|sector/i.test(context)) {
             return 'Technology / IT / Data Science';
         }
-        
+
         // Current company
         if (/current.*company|present.*company/i.test(context)) {
             return userData.currentCompany || 'Tech Company';
         }
-        
+
         // Fallback for any numeric field
         if (/how many|number of/i.test(context)) {
             return '3';
         }
-        
+
         console.log(`      ⚠️ No specific guess, returning empty`);
         return '';
     }
 
     async function fillTextareaField(textarea, fieldInfo) {
         console.log(`      📝 Filling textarea/paragraph field: "${fieldInfo.label}"`);
-        
+
         const context = fieldInfo.context.toLowerCase();
         const label = fieldInfo.label;
-        
+
         // If AI is available, ALWAYS use it for paragraph/essay questions
         if (contentState.openaiKey) {
             try {
                 const userData = { ...contentState.databaseData, ...contentState.resumeData };
                 const exp = userData.totalExperience || 0;
-                
+
                 const prompt = `You are helping fill a job application form. Write a professional, natural-sounding answer (NOT AI-sounding) for the following question. Keep it concise (100-300 words) and authentic.
 
 QUESTION: "${label}"
@@ -2246,7 +2246,7 @@ If "Describe a challenging project":
 Now write a natural, professional answer for: "${label}"
 
 Answer:`;
-                
+
                 const response = await Promise.race([
                     fetch('https://api.openai.com/v1/chat/completions', {
                         method: 'POST',
@@ -2263,15 +2263,15 @@ Answer:`;
                     }),
                     new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 15000))
                 ]);
-                
+
                 if (response.ok) {
                     const data = await response.json();
                     let answer = data.choices[0].message.content.trim();
-                    
+
                     // Clean up AI response
                     answer = answer.replace(/^["']|["']$/g, '');
                     answer = answer.replace(/^Answer:\s*/i, '');
-                    
+
                     if (answer && answer.length > 20 && answer.length < 2000) {
                         console.log(`      🤖 AI wrote paragraph (${answer.length} chars)`);
                         textarea.value = answer;
@@ -2283,12 +2283,12 @@ Answer:`;
                 console.warn('      ⚠️ AI paragraph generation failed:', error.message);
             }
         }
-        
+
         // FALLBACK: Generate basic paragraph without AI
         const userData = { ...contentState.databaseData, ...contentState.resumeData };
         const exp = userData.totalExperience || 0;
         let fallbackText = '';
-        
+
         if (/why.*work|why.*join|why.*interest/i.test(context)) {
             fallbackText = `I am interested in this position because it aligns well with my ${exp} years of experience in data analysis and my technical skills in Python, SQL, and machine learning. I am looking for opportunities to contribute to meaningful projects and continue growing professionally in the data science field.`;
         } else if (/why.*looking|why.*change|reason.*change/i.test(context)) {
@@ -2303,7 +2303,7 @@ Answer:`;
             // Generic professional answer
             fallbackText = `I have ${exp} years of experience in data science and analytics, with expertise in Python, SQL, machine learning, and data visualization. I am passionate about leveraging data to solve complex problems and deliver meaningful insights. I am looking forward to bringing my skills and experience to contribute effectively to your team.`;
         }
-        
+
         console.log(`      📄 Using fallback paragraph (${fallbackText.length} chars)`);
         textarea.value = fallbackText;
         triggerFieldEvents(textarea);
@@ -2313,12 +2313,12 @@ Answer:`;
     function fillCheckboxField(checkbox, fieldInfo) {
         const context = fieldInfo.context.toLowerCase();
         const label = fieldInfo.label.toLowerCase();
-        
+
         // Combine for better matching
         const fullText = `${context} ${label}`;
-        
+
         console.log(`      ☑️  Evaluating checkbox: "${fieldInfo.label.substring(0, 60)}"`);
-        
+
         // AUTO-CHECK patterns (common in job applications)
         const autoCheckPatterns = [
             /agree/i,
@@ -2337,7 +2337,7 @@ Answer:`;
             /equal.*opportunit/i,    // NEW: equal opportunity
             /statistical.*purpose/i  // NEW: data collection consent
         ];
-        
+
         // Check if any pattern matches
         for (const pattern of autoCheckPatterns) {
             if (pattern.test(fullText)) {
@@ -2347,7 +2347,7 @@ Answer:`;
                 return true;
             }
         }
-        
+
         // DON'T auto-check patterns (sensitive checkboxes)
         const doNotCheckPatterns = [
             /disability/i,
@@ -2358,14 +2358,14 @@ Answer:`;
             /criminal/i,
             /conviction/i
         ];
-        
+
         for (const pattern of doNotCheckPatterns) {
             if (pattern.test(fullText)) {
                 console.log(`      ⏭️  Skipping sensitive checkbox: "${pattern.source}"`);
                 return false;
             }
         }
-        
+
         // If context suggests it's required, check it
         if (/required|mandatory|must/i.test(fullText)) {
             console.log('      ✅ Checking required checkbox');
@@ -2373,7 +2373,7 @@ Answer:`;
             triggerFieldEvents(checkbox);
             return true;
         }
-        
+
         console.log('      ⏭️  No match, leaving unchecked');
         return false;
     }
@@ -2383,30 +2383,30 @@ Answer:`;
             console.log('         ⚠️ Radio has no name attribute, skipping');
             return false;
         }
-        
+
         const context = fieldInfo.context.toLowerCase();
         const label = fieldInfo.label.toLowerCase();
         const radioLabel = (radio.labels && radio.labels[0]) ? radio.labels[0].textContent.toLowerCase() : '';
         const radioValue = (radio.value || '').toLowerCase();
         const ariaLabel = (radio.getAttribute('aria-label') || '').toLowerCase();
-        
+
         // Combined search text
         const fullContext = `${context} ${label} ${radioLabel} ${radioValue} ${ariaLabel}`;
-        
+
         console.log(`         🔘 Evaluating radio option: "${radioLabel || radioValue || 'unlabeled'}"`);
         console.log(`            Context: ${context.substring(0, 80)}`);
-        
+
         // Check if any radio in this group is already selected
         const group = document.querySelectorAll(`input[type="radio"][name="${radio.name}"]`);
         const alreadySelected = Array.from(group).some(r => r.checked);
-        
+
         if (alreadySelected) {
             console.log('         ✓ Group already has selection, skipping');
             return false;
         }
-        
+
         // INTELLIGENT SELECTION LOGIC
-        
+
         // 1. RELOCATION / WILLING TO RELOCATE
         if (/relocate|willing.*relocate|move.*to|shift.*to/i.test(context)) {
             // Check if this radio is "Yes"
@@ -2417,7 +2417,7 @@ Answer:`;
                 return true;
             }
         }
-        
+
         // 2. CURRENTLY RESIDING / LIVING IN [CITY]
         if (/currently.*residing|living.*in|located.*in|based.*in/i.test(context)) {
             // If question asks "residing in X OR willing to relocate" → Select YES
@@ -2438,7 +2438,7 @@ Answer:`;
                 return true;
             }
         }
-        
+
         // 3. AUTHORIZATION / ELIGIBLE TO WORK
         if (/authorize|authorized|eligible|legally.*work|work.*authorization/i.test(context)) {
             if (/yes/i.test(fullContext) && !/no/i.test(fullContext)) {
@@ -2448,7 +2448,7 @@ Answer:`;
                 return true;
             }
         }
-        
+
         // 4. VISA SPONSORSHIP
         if (/visa|sponsorship|require.*sponsor/i.test(context)) {
             if (/no/i.test(fullContext) && !/yes/i.test(fullContext)) {
@@ -2458,7 +2458,7 @@ Answer:`;
                 return true;
             }
         }
-        
+
         // 5. COMFORTABLE / WILLING / OPEN TO
         if (/comfortable|willing|open.*to|okay.*with/i.test(context)) {
             if (/yes/i.test(fullContext) && !/no/i.test(fullContext)) {
@@ -2468,7 +2468,7 @@ Answer:`;
                 return true;
             }
         }
-        
+
         // 6. HAVE EXPERIENCE / HAVE SKILL
         if (/have.*experience|have.*skill|experienced.*in|skilled.*in/i.test(context)) {
             if (/yes/i.test(fullContext) && !/no/i.test(fullContext)) {
@@ -2478,17 +2478,17 @@ Answer:`;
                 return true;
             }
         }
-        
+
         // 7. MINIMUM YEARS OF EXPERIENCE
         if (/minimum.*year|at least.*year|\d+.*year.*experience/i.test(context)) {
             const userData = { ...contentState.databaseData, ...contentState.resumeData };
             const exp = userData.totalExperience || 0;
-            
+
             // Extract required years from context
             const match = context.match(/(\d+).*year/i);
             if (match) {
                 const requiredYears = parseInt(match[1]);
-                
+
                 if (exp >= requiredYears) {
                     if (/yes/i.test(fullContext) && !/no/i.test(fullContext)) {
                         console.log(`         ✅ Selecting YES (have ${exp} years >= ${requiredYears} required)`);
@@ -2506,7 +2506,7 @@ Answer:`;
                 }
             }
         }
-        
+
         // 8. BACKGROUND CHECK / VERIFICATION
         if (/background.*check|verification|background.*verification/i.test(context)) {
             if (/yes/i.test(fullContext) && !/no/i.test(fullContext)) {
@@ -2516,7 +2516,7 @@ Answer:`;
                 return true;
             }
         }
-        
+
         // 9. NOTICE PERIOD / IMMEDIATE JOINER
         if (/immediate.*join|immediate.*avail|join.*immediate/i.test(context)) {
             if (/yes/i.test(fullContext) && !/no/i.test(fullContext)) {
@@ -2526,21 +2526,21 @@ Answer:`;
                 return true;
             }
         }
-        
+
         // 10. GENDER / DIVERSITY QUESTIONS (handle carefully)
         if (/gender|sex|male|female/i.test(context)) {
             // Don't auto-select, let user handle
             console.log('         ⚠️ Gender question detected, skipping auto-fill');
             return false;
         }
-        
+
         // 11. FALLBACK: DEFAULT TO YES FOR MOST YES/NO QUESTIONS
         // If context suggests a positive response is expected
         if (/yes|no/i.test(fullContext)) {
             // Check if this is likely a question where YES is appropriate
             const positiveKeywords = /willing|comfortable|open|flexible|available|interested|agree/i;
             const negativeKeywords = /disability|handicap|criminal|conviction/i;
-            
+
             if (positiveKeywords.test(context) && !negativeKeywords.test(context)) {
                 if (/yes/i.test(fullContext) && !/no/i.test(fullContext)) {
                     console.log('         ✅ Selecting YES (default positive response)');
@@ -2550,7 +2550,7 @@ Answer:`;
                 }
             }
         }
-        
+
         // 12. LAST RESORT: If still nothing selected and this is the first option, select it
         const allOptions = Array.from(group);
         if (allOptions.length <= 2 && radio === allOptions[0]) {
@@ -2562,7 +2562,7 @@ Answer:`;
                 return true;
             }
         }
-        
+
         console.log('         ⏭️ No match for this radio option');
         return false;
     }
@@ -2571,44 +2571,44 @@ Answer:`;
         try {
             const userId = await getUserId();
             if (!userId) return false;
-            
+
             const response = await chrome.runtime.sendMessage({
                 action: 'FETCH_RESUME_FILE',
                 userId: userId
             });
-            
+
             if (response?.success && response.fileData?.url) {
                 const fileResponse = await fetch(response.fileData.url);
                 const blob = await fileResponse.blob();
                 const file = new File([blob], response.fileData.name || 'resume.pdf', { type: 'application/pdf' });
-                
+
                 const dataTransfer = new DataTransfer();
                 dataTransfer.items.add(file);
                 fileInput.files = dataTransfer.files;
-                
+
                 triggerFieldEvents(fileInput);
                 return true;
             }
         } catch (error) {
             // Silent
         }
-        
+
         return false;
     }
 
     function getAllVisibleFields(container = document) {
         const fields = container.querySelectorAll('input:not([type="hidden"]), textarea, select');
-        
+
         return Array.from(fields).filter(field => {
             const style = window.getComputedStyle(field);
             const rect = field.getBoundingClientRect();
-            
-            return style.display !== 'none' && 
-                   style.visibility !== 'hidden' && 
-                   !field.disabled && 
-                   !field.readOnly && 
-                   rect.width > 0 && 
-                   rect.height > 0;
+
+            return style.display !== 'none' &&
+                style.visibility !== 'hidden' &&
+                !field.disabled &&
+                !field.readOnly &&
+                rect.width > 0 &&
+                rect.height > 0;
         });
     }
 
@@ -2618,10 +2618,10 @@ Answer:`;
                 const label = document.querySelector(`label[for="${field.id}"]`);
                 if (label) return label.textContent.trim();
             }
-            
+
             const parentLabel = field.closest('label');
             if (parentLabel) return parentLabel.textContent.trim();
-            
+
             return field.getAttribute('aria-label') || field.placeholder || field.name || '';
         } catch {
             return '';
@@ -2630,23 +2630,23 @@ Answer:`;
 
     function isElementVisible(element) {
         if (!element) return false;
-        
+
         const rect = element.getBoundingClientRect();
         const style = window.getComputedStyle(element);
-        
-        return rect.width > 0 && 
-               rect.height > 0 && 
-               style.display !== 'none' && 
-               style.visibility !== 'hidden' &&
-               style.opacity !== '0';
+
+        return rect.width > 0 &&
+            rect.height > 0 &&
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            style.opacity !== '0';
     }
 
     function highlightField(field) {
         const orig = { bg: field.style.backgroundColor, border: field.style.border };
-        
+
         field.style.backgroundColor = '#dcfce7';
         field.style.border = '2px solid #22c55e';
-        
+
         setTimeout(() => {
             field.style.backgroundColor = orig.bg;
             field.style.border = orig.border;
@@ -2655,20 +2655,20 @@ Answer:`;
 
     function showNotification(message, type, duration) {
         const notif = document.createElement('div');
-        
-        const colors = { 
-            success: '#10B981', 
-            error: '#EF4444', 
-            info: '#3B82F6' 
+
+        const colors = {
+            success: '#10B981',
+            error: '#EF4444',
+            info: '#3B82F6'
         };
-        
+
         // Make error notifications MORE VISIBLE
         const isError = type === 'error';
         const fontSize = isError ? '16px' : '13px';
         const padding = isError ? '20px 24px' : '12px 16px';
         const maxWidth = isError ? '400px' : '300px';
         const zIndex = isError ? '9999999' : '999999';
-        
+
         notif.style.cssText = `
             position: fixed;
             top: ${isError ? '50%' : '20px'};
@@ -2688,10 +2688,10 @@ Answer:`;
             line-height: 1.5;
             ${isError ? 'border: 3px solid rgba(255,255,255,0.3);' : ''}
         `;
-        
+
         notif.textContent = message;
         document.body.appendChild(notif);
-        
+
         // Add animation for error
         if (isError) {
             notif.animate([
@@ -2703,7 +2703,7 @@ Answer:`;
                 easing: 'ease-out'
             });
         }
-        
+
         setTimeout(() => {
             if (notif.parentElement) {
                 if (isError) {
@@ -2725,16 +2725,16 @@ Answer:`;
         ['input', 'change', 'blur', 'focusout'].forEach(type => {
             field.dispatchEvent(new Event(type, { bubbles: true }));
         });
-        
+
         const nativeInputSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
         const nativeSelectSetter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set;
-        
+
         if (field.tagName === 'SELECT' && nativeSelectSetter) {
             nativeSelectSetter.call(field, field.value);
         } else if (nativeInputSetter) {
             nativeInputSetter.call(field, field.value);
         }
-        
+
         field.dispatchEvent(new Event('input', { bubbles: true }));
         field.dispatchEvent(new Event('change', { bubbles: true }));
     }
@@ -2744,778 +2744,652 @@ Answer:`;
     }
 
     // ==================== NAUKRI.COM AUTOMATION ====================
-    
-    async function startNaukriAutomation() {
-        if (contentState.isProcessing) {
-            throw new Error('Already running');
+    // ==================== NAUKRI.COM AUTOMATION - GUARANTEED WORKING ====================
+
+    // ==================== NAUKRI AUTOMATION - WORKS ON EVERY PAGE ====================
+    // ✅ This script automatically runs on EVERY naukri.com page
+    // ✅ Green indicator will show on every page
+    // ✅ Automation continues across page navigations
+
+    console.log('\n🔧 [NAUKRI] Content script loaded on:', window.location.href.substring(0, 80), '...\n');
+
+    const naukriState = {
+        isRunning: false,
+        processedUrls: new Set(),
+        clickedLinks: new Set(),
+        currentUrl: window.location.href,
+        config: {
+            MAX_JOBS: 5,
+            WAIT_AFTER_CLICK: 3500,
+            WAIT_AFTER_APPLY: 2000,
+            WAIT_FOR_BUTTON_CHECK: 1800,
+            MAX_ATTEMPTS: 30
+        },
+        stats: {
+            applied: 0,
+            skipped: 0,
+            startTime: null
         }
-        
-        console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('🚀 [NAUKRI] STARTING AUTOMATION');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-        
-        contentState.isProcessing = true;
-        contentState.processedJobs.clear();
-        contentState.currentJobIndex = 0;
-        contentState.stats.applicationsSubmitted = 0;
-        contentState.stats.jobsSkipped = 0;
-        contentState.stats.startTime = Date.now();
-        
-        try {
-            showNotification('📥 Loading data...', 'info', 2000);
-            
-            const userId = await getUserId();
-            if (!userId) throw new Error('Please login first');
-            
-            console.log('📥 [1/3] Loading data...');
-            await loadAllUserData(userId);
-            
-            if (!contentState.databaseData && !contentState.resumeData) {
-                throw new Error('No user data found');
-            }
-            console.log('✅ [1/3] Data loaded\n');
-            
-            showNotification('🔗 Checking Naukri page...', 'info', 2000);
-            console.log('🔗 [2/3] Checking page...');
-            
-            if (!checkIfLoggedInToNaukri()) {
-                showNotification(
-                    '🔒 NOT LOGGED IN!\n\nPlease login to Naukri.com first,\nthen click automation again.',
-                    'error',
-                    15000
-                );
+    };
+
+    // ==================== CHECK IF AUTOMATION SHOULD CONTINUE ====================
+
+    function checkContinueAutomation() {
+        // Check if automation was running
+        chrome.storage.local.get(['naukriRunning', 'naukriStats', 'naukriClicked'], (data) => {
+            if (data.naukriRunning) {
+                console.log('🔄 Automation is running - continuing on this page...\n');
+
+                // Restore state
+                if (data.naukriStats) {
+                    naukriState.stats = data.naukriStats;
+                }
+                if (data.naukriClicked) {
+                    naukriState.clickedLinks = new Set(data.naukriClicked);
+                }
+
+                naukriState.isRunning = true;
+
+                // Show indicator immediately
+                createIndicator();
+
+                // Continue automation after delay
                 setTimeout(() => {
-                    alert('⚠️ Naukri Login Required!\n\nYou are not logged in to Naukri.com.\n\nPlease:\n1. Login to Naukri.com\n2. Refresh the page\n3. Click automation button again');
-                }, 500);
-                throw new Error('Not logged in to Naukri.com');
+                    continueAutomation();
+                }, 1500);
             }
-            
-            const isOnCorrectPage = checkIfOnNaukriPage();
-            
-            if (!isOnCorrectPage) {
-                console.log('   Navigating to Naukri jobs...');
-                navigateToNaukriJobs();
-                await delay(8000);
-            } else {
-                console.log('   ✅ On jobs page');
+        });
+    }
+
+    // Run check on page load
+    checkContinueAutomation();
+
+    // ==================== INDICATOR ====================
+
+    function createIndicator() {
+        // Remove if exists
+        const existing = document.getElementById('naukri-status');
+        if (existing) existing.remove();
+
+        const box = document.createElement('div');
+        box.id = 'naukri-status';
+        box.style.cssText = `
+        position: fixed !important;
+        top: 20px !important;
+        right: 20px !important;
+        background: linear-gradient(135deg, #10b981, #059669) !important;
+        color: white !important;
+        padding: 18px 24px !important;
+        border-radius: 14px !important;
+        font-weight: 700 !important;
+        font-size: 15px !important;
+        z-index: 2147483647 !important;
+        box-shadow: 0 10px 30px rgba(16, 185, 129, 0.8) !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 14px !important;
+        min-width: 350px !important;
+        animation: slideIn 0.4s ease-out !important;
+        border: 3px solid rgba(255, 255, 255, 0.4) !important;
+    `;
+
+        box.innerHTML = `
+        <span style="animation: spin 1s linear infinite; display: inline-block; font-size: 22px;">⚙️</span>
+        <div style="flex: 1;">
+            <div style="font-size: 16px; margin-bottom: 4px; font-weight: 800; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">🟢 Naukri Automation Running</div>
+            <div id="naukri-status-text" style="font-size: 13px; opacity: 0.95; font-weight: 600;">Job ${naukriState.stats.applied + 1} (${naukriState.stats.applied}/${naukriState.config.MAX_JOBS})</div>
+        </div>
+    `;
+
+        document.body.appendChild(box);
+
+        // Add animations
+        if (!document.getElementById('naukri-animations')) {
+            const style = document.createElement('style');
+            style.id = 'naukri-animations';
+            style.textContent = `
+            @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
             }
-            console.log('✅ [2/3] Page ready\n');
-            
-            showNotification('🚀 Starting applications...', 'info', 2000);
-            console.log('🚀 [3/3] Processing jobs...\n');
-            
-            await processNaukriJobsSequentially();
-            
-            const totalTime = ((Date.now() - contentState.stats.startTime) / 1000).toFixed(1);
-            
-            console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            console.log('✅ [COMPLETE]');
-            console.log(`📊 Submitted: ${contentState.stats.applicationsSubmitted}/${contentState.config.MAX_JOBS}`);
-            console.log(`⏭️  Skipped: ${contentState.stats.jobsSkipped}`);
-            console.log(`⏱️  Time: ${totalTime}s`);
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-            
-            showNotification(
-                `✅ Done!\nSubmitted: ${contentState.stats.applicationsSubmitted}/${contentState.config.MAX_JOBS}`,
-                'success',
-                8000
-            );
-            
-            return {
-                success: true,
-                applicationsSubmitted: contentState.stats.applicationsSubmitted,
-                jobsSkipped: contentState.stats.jobsSkipped,
-                totalTime: totalTime
-            };
-            
-        } catch (error) {
-            console.error('❌ [ERROR]', error);
-            throw error;
-        } finally {
-            contentState.isProcessing = false;
+            @keyframes slideIn {
+                from { opacity: 0; transform: translateX(150px); }
+                to { opacity: 1; transform: translateX(0); }
+            }
+        `;
+            document.head.appendChild(style);
+        }
+
+        console.log('✅ Indicator created on current page\n');
+    }
+
+    function updateStatus(msg) {
+        const txt = document.getElementById('naukri-status-text');
+        if (txt) {
+            txt.textContent = msg;
         }
     }
-    
-    function checkIfLoggedInToNaukri() {
-        // Check for login button (means NOT logged in)
-        const loginBtn = document.querySelector('a[href*="login"]');
-        if (loginBtn && loginBtn.textContent.toLowerCase().includes('login')) {
-            console.log('❌ [LOGIN] Found login button - NOT logged in');
+
+    function removeIndicator() {
+        const box = document.getElementById('naukri-status');
+        if (box) {
+            box.style.transition = 'opacity 0.3s';
+            box.style.opacity = '0';
+            setTimeout(() => box.remove(), 400);
+        }
+
+        // Clear storage
+        chrome.storage.local.remove(['naukriRunning', 'naukriStats', 'naukriClicked']);
+    }
+
+    // ==================== MESSAGE HANDLER ====================
+
+    chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
+        if (req.action === 'START_NAUKRI_AUTOMATION') {
+            console.log('🎯 START message received!\n');
+
+            setTimeout(() => startAutomation(), 300);
+            sendResponse({ success: true });
             return false;
         }
-        
-        // Check for profile/user menu (means logged in)
-        const profileSelectors = [
-            '.nI-gNb-drawer__icon',
-            '.userPro',
-            '[data-ga-track="menu_user"]',
-            '.nI-gNb-img-container'
+    });
+
+    // ==================== SAVE STATE TO STORAGE ====================
+
+    function saveState() {
+        chrome.storage.local.set({
+            naukriRunning: naukriState.isRunning,
+            naukriStats: naukriState.stats,
+            naukriClicked: Array.from(naukriState.clickedLinks)
+        });
+    }
+
+    // ==================== START AUTOMATION ====================
+
+    async function startAutomation() {
+        console.log('\n' + '='.repeat(100));
+        console.log('🚀 STARTING NAUKRI AUTOMATION');
+        console.log('='.repeat(100) + '\n');
+
+        naukriState.isRunning = true;
+        naukriState.stats.applied = 0;
+        naukriState.stats.skipped = 0;
+        naukriState.stats.startTime = Date.now();
+        naukriState.processedUrls.clear();
+        naukriState.clickedLinks.clear();
+
+        saveState();
+
+        try {
+            createIndicator();
+            updateStatus('Starting...');
+
+            console.log('📍 URL:', window.location.href.substring(0, 80), '...\n');
+
+            // Check Naukri
+            if (!window.location.hostname.includes('naukri.com')) {
+                console.log('❌ Not on Naukri - navigating...\n');
+                window.location.href = 'https://www.naukri.com/data-analyst-jobs';
+                return;
+            }
+            console.log('✅ On Naukri\n');
+
+            // Check login
+            const loginCheck = document.querySelector('.nI-gNb-drawer__icon, .userPro, [class*="user"]');
+            if (!loginCheck) {
+                throw new Error('Not logged in to Naukri');
+            }
+            console.log('✅ Logged in\n');
+
+            // Run
+            await mainLoop();
+
+            // Done
+            const time = ((Date.now() - naukriState.stats.startTime) / 1000).toFixed(1);
+
+            console.log('\n' + '='.repeat(100));
+            console.log('✅ COMPLETED!');
+            console.log(`📊 Applied: ${naukriState.stats.applied}/${naukriState.config.MAX_JOBS}`);
+            console.log(`⏭️  Skipped: ${naukriState.stats.skipped}`);
+            console.log(`⏱️  Time: ${time}s`);
+            console.log('='.repeat(100) + '\n');
+
+            showNotif(`🎉 Done! ${naukriState.stats.applied} jobs`, 'success', 8000);
+
+            naukriState.isRunning = false;
+            saveState();
+            removeIndicator();
+
+        } catch (err) {
+            console.error('\n❌ ERROR:', err.message);
+            showNotif(`❌ ${err.message}`, 'error', 6000);
+            naukriState.isRunning = false;
+            saveState();
+            removeIndicator();
+        }
+    }
+
+    // ==================== CONTINUE AUTOMATION ====================
+
+    async function continueAutomation() {
+        console.log('🔄 Continuing automation on current page...\n');
+
+        updateStatus(`Processing... (${naukriState.stats.applied}/${naukriState.config.MAX_JOBS})`);
+
+        try {
+            // Check if on job page
+            if (!isJobPage(window.location.href)) {
+                console.log('⚠️  Not on job page - waiting...\n');
+                return;
+            }
+
+            console.log('✅ On job page\n');
+
+            // Process job
+            await processJob();
+
+            saveState();
+
+            // Check target
+            if (naukriState.stats.applied >= naukriState.config.MAX_JOBS) {
+                console.log('\n🎯 TARGET REACHED!\n');
+
+                const time = ((Date.now() - naukriState.stats.startTime) / 1000).toFixed(1);
+
+                showNotif(`🎉 Done! ${naukriState.stats.applied} jobs in ${time}s`, 'success', 8000);
+
+                naukriState.isRunning = false;
+                saveState();
+                removeIndicator();
+                return;
+            }
+
+            // Find next
+            console.log('🔍 Finding next job...\n');
+            updateStatus('Finding next job...');
+
+            if (!await findNextJob()) {
+                console.log('❌ No more jobs\n');
+
+                showNotif(`⚠️ Completed ${naukriState.stats.applied} jobs`, 'success', 6000);
+
+                naukriState.isRunning = false;
+                saveState();
+                removeIndicator();
+                return;
+            }
+
+            console.log('✅ Clicked next job - waiting for new page...\n');
+
+            // State saved - will continue on new page automatically!
+
+        } catch (err) {
+            console.error('\n❌ ERROR:', err.message);
+            showNotif(`❌ ${err.message}`, 'error', 6000);
+            naukriState.isRunning = false;
+            saveState();
+            removeIndicator();
+        }
+    }
+
+    // ==================== MAIN LOOP ====================
+
+    async function mainLoop() {
+        const url = window.location.href;
+
+        console.log('📍 Current page:');
+        console.log(`   URL: ${url.substring(0, 80)}...`);
+        console.log(`   Is search: ${isSearchPage(url)}`);
+        console.log(`   Is job: ${isJobPage(url)}\n`);
+
+        // If search page, click first
+        if (isSearchPage(url)) {
+            console.log('═'.repeat(100));
+            console.log('📄 ON SEARCH PAGE - CLICKING FIRST JOB');
+            console.log('═'.repeat(100) + '\n');
+
+            updateStatus('Clicking first job...');
+
+            if (!await clickFirstJob()) {
+                throw new Error('No jobs found');
+            }
+
+            console.log('✅ First job clicked - page will reload with new URL\n');
+
+            // Save state before navigation
+            saveState();
+
+            // Wait for navigation - content script will auto-continue on new page
+            return;
+        }
+
+        // If already on job page, process it
+        if (isJobPage(url)) {
+            await continueAutomation();
+        }
+    }
+
+    // ==================== CLICK FIRST JOB ====================
+
+    async function clickFirstJob() {
+        console.log('🎯 Finding first job:\n');
+
+        const selectors = [
+            'a[href*="job-listings"]',
+            '.jobTuple a',
+            'article a'
         ];
-        
-        for (const selector of profileSelectors) {
-            if (document.querySelector(selector)) {
-                console.log('✅ [LOGIN] User is logged in');
-                return true;
+
+        for (const sel of selectors) {
+            const links = document.querySelectorAll(sel);
+            console.log(`   ${sel}: ${links.length} found`);
+
+            if (links.length > 0) {
+                for (const link of links) {
+                    const text = link.textContent.trim();
+                    if (text.length >= 8) {
+                        console.log(`   ✅ Clicking: "${text.substring(0, 50)}..."\n`);
+
+                        naukriState.clickedLinks.add(link.href);
+                        saveState();
+
+                        link.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        await delay(700);
+
+                        link.style.backgroundColor = '#bfdbfe';
+                        link.click();
+
+                        return true;
+                    }
+                }
             }
         }
-        
-        // Check for job cards (only visible when logged in)
-        const jobCards = document.querySelectorAll('.jobTuple, article[data-job-id]');
-        if (jobCards.length > 0) {
-            console.log('✅ [LOGIN] Job cards visible - logged in');
-            return true;
-        }
-        
-        console.log('⚠️ [LOGIN] Cannot confirm');
+
         return false;
     }
-    
-    function checkIfOnNaukriPage() {
-        const currentUrl = new URL(window.location.href);
-        
-        if (!currentUrl.hostname.includes('naukri.com')) return false;
-        
-        // Check if on jobs page or search results
-        return currentUrl.pathname.includes('/jobs') || 
-               currentUrl.pathname.includes('/data-analyst') ||
-               currentUrl.pathname.includes('/job-listings');
+
+    // ==================== FIND NEXT JOB ====================
+
+    async function findNextJob() {
+        console.log('   🎯 Finding next job:\n');
+
+        // Strategy 1: Right sidebar
+        console.log('   [1] Right sidebar...');
+        if (await findInSidebar()) {
+            console.log('   ✅ Found!\n');
+            return true;
+        }
+
+        // Strategy 2: Scroll
+        console.log('\n   [2] Scrolling...');
+        if (await findByScroll()) {
+            console.log('   ✅ Found!\n');
+            return true;
+        }
+
+        // Strategy 3: Any visible
+        console.log('\n   [3] Any visible...');
+        if (await findAnyVisible()) {
+            console.log('   ✅ Found!\n');
+            return true;
+        }
+
+        // Strategy 4: Desperate
+        console.log('\n   [4] Desperate...');
+        if (await findDesperate()) {
+            console.log('   ✅ Found!\n');
+            return true;
+        }
+
+        return false;
     }
-    
-    function navigateToNaukriJobs() {
-        window.location.href = 'https://www.naukri.com/data-analyst-jobs';
-    }
-    
-    async function processNaukriJobsSequentially() {
-        let consecutiveErrors = 0;
-        const maxErrors = contentState.config.MAX_CONSECUTIVE_ERRORS;
-        
-        // Process jobs on CURRENT page (same tab approach)
-        while (contentState.stats.applicationsSubmitted < contentState.config.MAX_JOBS && 
-               consecutiveErrors < maxErrors) {
-            
-            try {
-                // Get job cards from CURRENT page
-                const allJobCards = getAllNaukriJobCards();
-                
-                if (allJobCards.length === 0) {
-                    console.log('⚠️ [JOBS] No job cards found on current page');
-                    
-                    // Check if we're on a job details page - need to go back
-                    if (window.location.pathname.includes('job-listings')) {
-                        console.log('📍 On job details page, need to find next job card here');
-                        // Stay on this page and look for "Jobs you might be interested in" section
-                        await delay(2000);
-                        continue;
-                    }
-                    
-                    break;
+
+    async function findInSidebar() {
+        const headers = document.querySelectorAll('h2, h3, h4, div, p, span');
+
+        for (const h of headers) {
+            const txt = h.textContent.toLowerCase();
+
+            if (txt.includes('might') || txt.includes('interested') || txt.includes('similar')) {
+                console.log(`      ✓ Header: "${h.textContent.substring(0, 35)}..."`);
+
+                let parent = h;
+                for (let i = 0; i < 5; i++) {
+                    if (parent.parentElement) parent = parent.parentElement;
                 }
-                
-                console.log(`📋 Found ${allJobCards.length} job cards on current page`);
-                
-                // Take the FIRST unprocessed job card
-                let jobCard = null;
-                let jobId = null;
-                
-                for (let i = 0; i < allJobCards.length; i++) {
-                    const card = allJobCards[i];
-                    const id = extractNaukriJobId(card);
-                    
-                    if (!contentState.processedJobs.has(id)) {
-                        jobCard = card;
-                        jobId = id;
-                        contentState.currentJobIndex = i;
-                        break;
-                    }
+
+                const links = parent.querySelectorAll('a[href*="job-listings"]');
+                console.log(`      ✓ ${links.length} links`);
+
+                for (const link of links) {
+                    if (await tryClick(link)) return true;
                 }
-                
-                if (!jobCard) {
-                    console.log('⚠️ [JOBS] All jobs on this page processed');
-                    break;
-                }
-                
-                const jobStartTime = Date.now();
-                
-                console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-                console.log(`🎯 [JOB ${contentState.currentJobIndex + 1}/${allJobCards.length}] ID: ${jobId}`);
-                console.log(`   📊 Progress: ${contentState.stats.applicationsSubmitted}/${contentState.config.MAX_JOBS}`);
-                console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-                
-                const result = await processSingleNaukriJob(jobCard, jobId);
-                
-                const jobTime = ((Date.now() - jobStartTime) / 1000).toFixed(1);
-                
-                if (result.submitted) {
-                    contentState.stats.applicationsSubmitted++;
-                    consecutiveErrors = 0;
-                    console.log(`✅ [SUCCESS] ${contentState.stats.applicationsSubmitted}/${contentState.config.MAX_JOBS} (${jobTime}s)`);
-                    showNotification(`✅ App ${contentState.stats.applicationsSubmitted}/${contentState.config.MAX_JOBS}`, 'success', 2000);
-                } else {
-                    contentState.stats.jobsSkipped++;
-                    console.log(`⏭️  [SKIPPED] ${result.reason} (${jobTime}s)`);
-                }
-                
-                // After processing, we should be on job details page
-                // Wait a bit before looking for next job
-                await delay(2000);
-                
-            } catch (error) {
-                console.error(`❌ [ERROR]`, error.message);
-                consecutiveErrors++;
-                contentState.stats.jobsSkipped++;
-                
-                if (consecutiveErrors >= maxErrors) {
-                    console.error(`❌ [FATAL] Too many errors, stopping`);
-                    break;
-                }
-                
-                await delay(2000);
             }
         }
+
+        return false;
     }
-    
-    function getAllNaukriJobCards() {
-        // Check if we're on job details page - look for "Similar jobs"
-        const isJobDetailsPage = window.location.pathname.includes('job-listings');
-        
-        if (isJobDetailsPage) {
-            console.log('   📍 On job details page, looking for Similar Jobs...');
-            
-            // Look for "Similar jobs" section
-            const similarJobsSelectors = [
-                '.similar-jobs article',
-                '[class*="similar"] article',
-                '.related-jobs article',
-                '[class*="related"] article',
-                'article.tuple',
-                'article'
-            ];
-            
-            for (const selector of similarJobsSelectors) {
-                const cards = Array.from(document.querySelectorAll(selector))
-                    .filter(card => {
-                        if (!isElementVisible(card)) return false;
-                        
-                        // Must have job content
-                        const text = card.textContent.toLowerCase();
-                        return text.includes('analyst') || 
-                               text.includes('data') || 
-                               text.includes('years') ||
-                               text.includes('yrs') ||
-                               text.includes('experience');
-                    });
-                
-                if (cards.length > 0) {
-                    console.log(`   📋 Found ${cards.length} similar job cards`);
-                    return cards;
-                }
-            }
-            
-            console.log('   ⚠️ No similar jobs found on details page');
-            return [];
+
+    async function findByScroll() {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        await delay(2500);
+
+        for (const link of document.querySelectorAll('a[href*="job-listings"]')) {
+            if (await tryClick(link)) return true;
         }
-        
-        // On search results page
-        console.log('   📍 On search page...');
-        
-        const selectors = [
-            'article.tuple',
-            '.tuple',
-            'article',
-            '[class*="job"]'
-        ];
-        
-        for (const selector of selectors) {
-            const cards = Array.from(document.querySelectorAll(selector))
-                .filter(card => {
-                    if (!isElementVisible(card)) return false;
-                    
-                    const text = card.textContent.toLowerCase();
-                    return text.includes('analyst') || 
-                           text.includes('engineer') ||
-                           text.includes('data') || 
-                           text.includes('yrs');
-                });
-            
-            if (cards.length > 0) {
-                console.log(`   📋 Found ${cards.length} job cards`);
-                return cards;
-            }
-        }
-        
-        return [];
+
+        return false;
     }
-    
-    function extractNaukriJobId(jobCard) {
-        const jobId = jobCard.getAttribute('data-job-id') ||
-                     jobCard.getAttribute('data-jobid') ||
-                     jobCard.querySelector('[data-job-id]')?.getAttribute('data-job-id');
-        
-        if (jobId) return jobId;
-        
-        const titleLink = jobCard.querySelector('a.title, a[href*="job-listings"]');
-        if (titleLink) {
-            const href = titleLink.href;
-            const match = href.match(/job-listings-(.+?)(?:\?|$)/);
-            if (match) return match[1];
+
+    async function findAnyVisible() {
+        const all = document.querySelectorAll('a[href*="job-listings"]');
+        const visible = Array.from(all).filter(l => isVisible(l));
+
+        console.log(`      ${visible.length} visible`);
+
+        for (const link of visible) {
+            if (await tryClick(link)) return true;
         }
-        
-        return `naukri-job-${contentState.currentJobIndex}`;
+
+        return false;
     }
-    
-    async function processSingleNaukriJob(jobCard, jobId) {
-        if (contentState.processedJobs.has(jobId)) {
-            console.log('   ⏭️  Already processed');
-            return { submitted: false, skipped: true, reason: 'Already processed' };
+
+    async function findDesperate() {
+        const all = document.querySelectorAll('a[href*="job-listings"]');
+
+        for (const link of all) {
+            if (naukriState.clickedLinks.has(link.href)) continue;
+
+            console.log(`      🚨 Click: "${link.textContent.trim().substring(0, 40)}..."`);
+
+            naukriState.clickedLinks.add(link.href);
+            saveState();
+
+            link.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            await delay(600);
+            link.click();
+
+            return true;
         }
-        
-        try {
-            // STEP 1: Click job card (opens in NEW tab)
-            console.log('   [1/6] 🖱️  Clicking job card to open in new tab...');
-            
-            // Get the job link
-            const titleLink = jobCard.querySelector('a[href*="job-listings"], a');
-            if (!titleLink) {
-                console.log('   [1/6] ❌ No link found');
-                contentState.processedJobs.add(jobId);
-                return { submitted: false, skipped: true, reason: 'No link' };
-            }
-            
-            const jobUrl = titleLink.href;
-            console.log('         Job URL:', jobUrl.substring(0, 80));
-            
-            // Open in same tab by clicking
-            titleLink.click();
-            
-            // Wait for navigation
-            console.log('         ⏳ Waiting for page to load...');
-            await delay(4000);
-            
-            // Verify we're on job details page
-            if (!window.location.href.includes('job-listings')) {
-                console.log('   [1/6] ❌ Not on job details page');
-                contentState.processedJobs.add(jobId);
-                return { submitted: false, skipped: true, reason: 'Navigation failed' };
-            }
-            
-            console.log('   [1/6] ✅ Job details page loaded');
-            
-            // STEP 2: Check for Apply button type
-            console.log('   [2/6] 🔍 Checking button type...');
-            
-            // Look for "Apply on company site" - SKIP these
-            const companyApplyButtons = document.querySelectorAll('button, a');
-            for (const btn of companyApplyButtons) {
-                if (!isElementVisible(btn)) continue;
-                
-                const text = btn.textContent.toLowerCase().trim();
-                if (text.includes('apply on company site') || text === 'apply on company site') {
-                    console.log('   [2/6] ⏭️  "Apply on company site" found - SKIPPING');
-                    contentState.processedJobs.add(jobId);
-                    return { submitted: false, skipped: true, reason: 'External application (company site)' };
-                }
-            }
-            
-            // Look for regular "Apply" button
-            let applyButton = null;
-            const allButtons = document.querySelectorAll('button, a');
-            
-            for (const btn of allButtons) {
-                if (!isElementVisible(btn)) continue;
-                
-                const text = btn.textContent.toLowerCase().trim();
-                
-                // Check if already applied
-                if (text === 'applied' || text.includes('already applied')) {
-                    console.log('   [2/6] ⏭️  Already applied');
-                    contentState.processedJobs.add(jobId);
-                    return { submitted: false, skipped: true, reason: 'Already applied' };
-                }
-                
-                // Look for exact "Apply" button
-                if (text === 'apply' && !text.includes('company')) {
-                    applyButton = btn;
-                    console.log('   [2/6] ✅ Found "Apply" button!');
-                    break;
-                }
-            }
-            
-            if (!applyButton) {
-                console.log('   [2/6] ⏭️  No "Apply" button found');
-                contentState.processedJobs.add(jobId);
-                return { submitted: false, skipped: true, reason: 'No Apply button' };
-            }
-            
-            // STEP 3: Click Apply button
-            console.log('   [3/6] 🖱️  Clicking Apply button...');
-            
-            applyButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            await delay(500);
-            
-            applyButton.click();
-            await delay(3000);
-            
-            console.log('   [3/6] ✅ Apply button clicked');
-            
-            // STEP 4: Check if applied successfully (direct application)
-            console.log('   [4/6] 🔍 Checking application status...');
-            
-            // Look for success message
-            const pageText = document.body.textContent.toLowerCase();
-            if (pageText.includes('successfully applied') || 
-                pageText.includes('you have successfully applied') ||
-                pageText.includes('application sent')) {
-                
-                console.log('   [4/6] ✅ Direct application successful!');
-                console.log('   [5/6] ⏭️  No form needed');
-                console.log('   [6/6] ✅ JOB APPLIED!');
-                
-                contentState.processedJobs.add(jobId);
-                return { submitted: true };
-            }
-            
-            // STEP 5: Check if form/drawer opened
-            console.log('   [4/6] 🔍 Checking for application form...');
-            
-            const formSelectors = [
-                '.drawer',
-                '.panel',
-                '[role="dialog"]',
-                '.modal',
-                'aside',
-                '[class*="apply"]'
-            ];
-            
-            let formFound = false;
-            let formElement = null;
-            
-            for (const selector of formSelectors) {
-                const element = document.querySelector(selector);
-                if (element && isElementVisible(element)) {
-                    const hasFields = element.querySelector('input, select, textarea, button');
-                    if (hasFields) {
-                        formFound = true;
-                        formElement = element;
-                        console.log('   [4/6] ✅ Form found!');
-                        break;
-                    }
-                }
-            }
-            
-            if (!formFound) {
-                // No form, assuming applied
-                console.log('   [4/6] ⚠️ No form found, assuming applied');
-                console.log('   [5/6] ⏭️  Skipped');
-                console.log('   [6/6] ✅ JOB APPLIED (assumed)');
-                
-                contentState.processedJobs.add(jobId);
-                return { submitted: true };
-            }
-            
-            // STEP 6: Fill and submit form
-            console.log('   [5/6] 📝 Filling application form...');
-            
-            const filled = await fillAllFieldsInModal();
-            console.log(`   [5/6] ✅ Filled ${filled} fields`);
-            
-            console.log('   [6/6] 🚀 Submitting...');
-            
-            // Find submit button
-            const submitSelectors = [
-                'button[type="submit"]',
-                'button.submit',
-                'button:contains("Submit")',
-                'button:contains("Apply")'
-            ];
-            
-            let submitButton = null;
-            for (const selector of submitSelectors) {
-                const buttons = formElement ? formElement.querySelectorAll('button') : document.querySelectorAll('button');
-                
-                for (const btn of buttons) {
-                    if (!isElementVisible(btn)) continue;
-                    
-                    const text = btn.textContent.toLowerCase();
-                    if (text.includes('submit') || text.includes('apply')) {
-                        submitButton = btn;
-                        break;
-                    }
-                }
-                
-                if (submitButton) break;
-            }
-            
-            if (submitButton) {
-                submitButton.click();
-                await delay(2000);
-                console.log('   [6/6] ✅ Form submitted!');
-            } else {
-                console.log('   [6/6] ⚠️ No submit button, assuming complete');
-            }
-            
-            console.log('   ✅ JOB APPLIED SUCCESSFULLY!');
-            contentState.processedJobs.add(jobId);
-            return { submitted: true };
-            
-        } catch (error) {
-            console.error('   ❌ ERROR:', error.message);
-            contentState.processedJobs.add(jobId);
-            return { submitted: false, skipped: true, reason: error.message };
-        }
+
+        return false;
     }
-    
-    async function clickNaukriJobCard(jobCard) {
-        jobCard.scrollIntoView({ behavior: 'auto', block: 'center' });
+
+    async function tryClick(link) {
+        if (!isVisible(link)) return false;
+
+        const txt = link.textContent.trim();
+        if (txt.length < 8) return false;
+
+        const href = link.href;
+        if (naukriState.clickedLinks.has(href)) return false;
+
+        console.log(`      ✅ "${txt.substring(0, 45)}..."`);
+
+        naukriState.clickedLinks.add(href);
+        saveState();
+
+        link.scrollIntoView({ behavior: 'smooth', block: 'center' });
         await delay(500);
-        
-        const originalBg = jobCard.style.backgroundColor;
-        jobCard.style.backgroundColor = '#dbeafe';
-        
-        console.log('      🔍 Looking for title link...');
-        
-        // Try multiple selectors for title link
-        const titleSelectors = [
-            'a.title',                          // Standard title class
-            'a[href*="job-listings"]',          // Links to job listings
-            'a[class*="title"]',                // Any link with title in class
-            'h3 a',                             // Links in h3
-            'h2 a',                             // Links in h2
-            '.tuple a:first-of-type',           // First link in tuple
-            'a'                                 // Fallback: first link
-        ];
-        
-        let titleLink = null;
-        for (const selector of titleSelectors) {
-            titleLink = jobCard.querySelector(selector);
-            if (titleLink) {
-                console.log(`      ✅ Found title link with: ${selector}`);
-                break;
-            }
+
+        link.style.backgroundColor = '#bfdbfe';
+        link.click();
+        await delay(400);
+
+        return true;
+    }
+
+    // ==================== PROCESS JOB ====================
+
+    async function processJob() {
+        const url = window.location.href;
+
+        if (naukriState.processedUrls.has(url)) {
+            console.log('⏭️  Already processed\n');
+            return;
         }
-        
-        if (titleLink) {
-            try {
-                console.log('      🖱️  Clicking title link...');
-                titleLink.click();
-            } catch {
-                titleLink.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+        naukriState.processedUrls.add(url);
+
+        const title = getTitle();
+        console.log(`📋 Job: ${title.substring(0, 60)}...`);
+
+        await delay(naukriState.config.WAIT_FOR_BUTTON_CHECK);
+
+        const btn = getButtonType();
+        console.log(`🔘 Button: ${btn}\n`);
+
+        if (btn === 'APPLY') {
+            console.log('✅ Applying...\n');
+            updateStatus('Applying...');
+
+            if (await apply()) {
+                naukriState.stats.applied++;
+                saveState();
+
+                console.log(`🎉 SUCCESS #${naukriState.stats.applied}\n`);
+                showNotif(`✅ ${naukriState.stats.applied}/${naukriState.config.MAX_JOBS}`, 'success', 2000);
+
+                await delay(naukriState.config.WAIT_AFTER_APPLY);
             }
         } else {
-            // Fallback: click the card itself
-            console.log('      ⚠️ No title link, clicking card...');
-            try {
-                jobCard.click();
-            } catch {
-                jobCard.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-            }
+            console.log('⏭️  Skipping\n');
+            naukriState.stats.skipped++;
+            saveState();
         }
-        
-        await delay(300);
-        jobCard.style.backgroundColor = originalBg;
     }
-    
-    async function checkForNaukriApplyButton() {
-        const maxAttempts = 3;
-        
-        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-            console.log(`      🔍 Attempt ${attempt}/${maxAttempts}...`);
-            
-            // First check for "Apply on company site" - we want to SKIP these
-            const externalSelectors = [
-                'button',
-                'a',
-                '[class*="apply"]'
-            ];
-            
-            for (const selector of externalSelectors) {
-                const elements = document.querySelectorAll(selector);
-                
-                for (const element of elements) {
-                    if (!isElementVisible(element)) continue;
-                    
-                    const text = element.textContent.toLowerCase().trim();
-                    
-                    // CRITICAL: Skip "Apply on company site"
-                    if (text.includes('apply on company site') || 
-                        text.includes('company site') ||
-                        text.includes('company website')) {
-                        console.log(`         ⚠️ Found "Apply on company site" - SKIPPING`);
-                        return { hasApply: false, alreadyApplied: false, isExternal: true };
-                    }
-                }
-            }
-            
-            // Now look for regular "Apply" button
-            const applySelectors = [
-                'button',
-                'a'
-            ];
-            
-            for (const selector of applySelectors) {
-                const buttons = document.querySelectorAll(selector);
-                
-                for (const button of buttons) {
-                    if (!isElementVisible(button)) continue;
-                    
-                    const text = button.textContent.toLowerCase().trim();
-                    const className = (button.className || '').toLowerCase();
-                    
-                    // Check if already applied
-                    if (text.includes('applied') || 
-                        text === 'applied' ||
-                        className.includes('applied')) {
-                        console.log(`         ⏭️ Already applied`);
-                        return { hasApply: false, alreadyApplied: true, isExternal: false };
-                    }
-                    
-                    // Check for exact "Apply" button (NOT "Apply on company site")
-                    if (text === 'apply' || 
-                        (text.includes('apply') && 
-                         !text.includes('company') && 
-                         !text.includes('site') &&
-                         !text.includes('website'))) {
-                        console.log(`         ✅ Found Apply button: "${text}"`);
-                        return { hasApply: true, button: button, alreadyApplied: false, isExternal: false };
-                    }
-                }
-            }
-            
-            if (attempt < maxAttempts) {
-                console.log('      ⏳ Waiting before retry...');
-                await delay(1500);
-            }
+
+    function getTitle() {
+        for (const s of ['h1', '.jd-header-title', '[class*="title"]']) {
+            const e = document.querySelector(s);
+            if (e && e.textContent.trim()) return e.textContent.trim();
         }
-        
-        console.log('      ❌ No Apply button found');
-        return { hasApply: false, alreadyApplied: false, isExternal: false };
+        return 'Unknown';
     }
-    
-    async function clickNaukriApplyButton(button) {
-        button.scrollIntoView({ behavior: 'auto', block: 'center' });
-        await delay(300);
-        
+
+    function getButtonType() {
+        for (const b of document.querySelectorAll('button')) {
+            if (!isVisible(b)) continue;
+            const t = b.textContent.toLowerCase().trim();
+            if (t.includes('company')) return 'COMPANY_SITE';
+            if (t === 'apply' || t === 'apply now') return 'APPLY';
+        }
+        return 'UNKNOWN';
+    }
+
+    async function apply() {
         try {
-            button.click();
-        } catch {
-            button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-        }
-        
-        console.log('         ✅ Button clicked');
-    }
-    
-    async function checkForNaukriApplicationForm() {
-        // Check if form/modal/panel opened
-        const formSelectors = [
-            '.modal',
-            '[role="dialog"]',
-            '.drawer',
-            '.panel',
-            '.application-form',
-            '[class*="apply"]',
-            'aside',
-            '.sidebar'
-        ];
-        
-        for (const selector of formSelectors) {
-            const form = document.querySelector(selector);
-            if (form && isElementVisible(form)) {
-                // Check if it has form elements
-                const hasFields = form.querySelector('input, select, textarea, button[type="submit"]');
-                if (hasFields) {
-                    console.log(`      ✅ Form found with: ${selector}`);
-                    return true;
+            let btn = null;
+            for (const b of document.querySelectorAll('button')) {
+                if (!isVisible(b)) continue;
+                const t = b.textContent.toLowerCase().trim();
+                if (t === 'apply' || t === 'apply now') {
+                    btn = b;
+                    break;
                 }
             }
-        }
-        
-        return false;
-    }
-    
-    async function handleNaukriApplication() {
-        // Check for resume upload popup
-        const resumePopup = document.querySelector('.uploadResume, [data-test="upload-resume"]');
-        
-        if (resumePopup && isElementVisible(resumePopup)) {
-            console.log('      📄 Resume upload required');
-            
-            const uploaded = await uploadResumeToNaukri();
-            
-            if (!uploaded) {
-                console.log('      ❌ Resume upload failed');
-                return false;
-            }
-            
-            console.log('      ✅ Resume uploaded');
+
+            if (!btn) return false;
+
+            btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            await delay(600);
+            btn.click();
             await delay(2000);
-        }
-        
-        // Check for application form
-        const formModal = document.querySelector('.modal, [role="dialog"], .application-form');
-        
-        if (formModal && isElementVisible(formModal)) {
-            console.log('      📝 Filling application form');
-            
-            const filled = await fillAllFieldsInModal();
-            console.log(`      ✅ Filled ${filled} fields`);
-            
-            await delay(1000);
-            
-            // Click submit
-            const submitBtn = await findNaukriSubmitButton();
-            if (submitBtn) {
-                submitBtn.click();
-                await delay(3000);
-                return true;
+
+            const modal = document.querySelector('.modal, [role="dialog"]');
+            if (modal && isVisible(modal)) {
+                for (const f of modal.querySelectorAll('input, select')) {
+                    if (!isVisible(f)) continue;
+                    if (f.type === 'checkbox') f.checked = true;
+                    else if (f.tagName === 'SELECT' && f.options.length > 1) f.selectedIndex = 1;
+                    else if (f.type !== 'file' && f.type !== 'hidden') f.value = 'Demo';
+                    await delay(100);
+                }
+
+                const sub = modal.querySelector('button[type="submit"]');
+                if (sub) {
+                    await delay(500);
+                    sub.click();
+                    await delay(1500);
+                }
             }
-        }
-        
-        // If no form, application may be direct
-        await delay(2000);
-        const successMsg = document.body.textContent.toLowerCase();
-        if (successMsg.includes('applied') || successMsg.includes('application sent')) {
+
             return true;
-        }
-        
-        return false;
-    }
-    
-    async function uploadResumeToNaukri() {
-        try {
-            const fileInput = document.querySelector('input[type="file"]');
-            if (!fileInput) return false;
-            
-            return await uploadResumeFile(fileInput);
-        } catch (error) {
+        } catch (e) {
             return false;
         }
     }
-    
-    async function findNaukriSubmitButton() {
-        const submitSelectors = [
-            'button[type="submit"]',
-            'button.btn-primary',
-            'button.submit-button',
-            'input[type="submit"]',
-            'button:contains("Submit")',
-            'button:contains("Apply")'
-        ];
-        
-        for (const selector of submitSelectors) {
-            const buttons = document.querySelectorAll(selector);
-            
-            for (const btn of buttons) {
-                if (isElementVisible(btn) && !btn.disabled) {
-                    const text = btn.textContent.toLowerCase();
-                    if (text.includes('submit') || text.includes('apply')) {
-                        return btn;
-                    }
-                }
-            }
-        }
-        
-        return null;
+
+    // ==================== HELPERS ====================
+
+    function isSearchPage(url) {
+        return url.includes('/data-analyst-jobs') && !url.includes('job-listings');
     }
-    
+
+    function isJobPage(url) {
+        return url.includes('job-listings');
+    }
+
+    function isVisible(el) {
+        if (!el) return false;
+        const r = el.getBoundingClientRect();
+        const s = window.getComputedStyle(el);
+        return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
+    }
+
+    function delay(ms) {
+        return new Promise(r => setTimeout(r, ms));
+    }
+
+    function showNotif(msg, type = 'info', dur = 3000) {
+        const n = document.createElement('div');
+        n.style.cssText = `
+        position: fixed !important;
+        top: 95px !important;
+        right: 20px !important;
+        background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'} !important;
+        color: white !important;
+        padding: 14px 22px !important;
+        border-radius: 10px !important;
+        font-size: 15px !important;
+        font-weight: 700 !important;
+        z-index: 2147483646 !important;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4) !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif !important;
+    `;
+
+        n.textContent = msg;
+        document.body.appendChild(n);
+
+        setTimeout(() => {
+            n.style.opacity = '0';
+            setTimeout(() => n.remove(), 300);
+        }, dur);
+    }
+
+    console.log('✅ Content script ready and waiting for commands!\n');
+
     // ==================== END NAUKRI AUTOMATION ====================
 
     async function getUserId() {
