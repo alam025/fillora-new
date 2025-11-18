@@ -473,7 +473,7 @@ async function startLinkedInAutomation() {
     }
 }
 
-// ==================== NAUKRI AUTOMATION - UPDATED FOR PERSISTENT CONTENT SCRIPT ====================
+// ==================== NAUKRI AUTOMATION - FIXED VERSION ====================
 
 async function startNaukriAutomation() {
     if (appState.automation.isRunning) {
@@ -515,26 +515,40 @@ async function startNaukriAutomation() {
             showInfo('Page loaded! Starting automation...');
         }
 
-        // Content script is already injected via manifest
-        // Just send the START message
-        if (naukriBtn) naukriBtn.innerHTML = '🚀 Starting automation...';
+        // ✅✅✅ CRITICAL: Set Chrome Storage BEFORE anything else! ✅✅✅
+        if (naukriBtn) naukriBtn.innerHTML = '💾 Setting up state...';
         
-        console.log('📤 [POPUP] Sending NAUKRI START message...');
+        console.log('💾 [POPUP] Setting Chrome Storage...');
+        await chrome.storage.local.set({
+            naukri_running: true,
+            naukri_applied: 0,
+            naukri_skipped: 0,
+            naukri_clicked: [],
+            naukri_processed: []
+        });
+        console.log('✅ [POPUP] Chrome Storage set successfully!');
+
+        // Set window flag via injection
+        if (naukriBtn) naukriBtn.innerHTML = '🚀 Injecting automation...';
         
-        // Send message to naukri-content.js
-        chrome.tabs.sendMessage(currentTab.id, {
-            action: 'START_NAUKRI_AUTOMATION'
-        }, (response) => {
-            if (chrome.runtime.lastError) {
-                // This is OK - popup might have closed
-                console.log('ℹ️ [POPUP] Message sent (popup may close)');
-            } else if (response && response.success) {
-                console.log('✅ [POPUP] Naukri automation started');
+        await chrome.scripting.executeScript({
+            target: { tabId: currentTab.id },
+            func: () => {
+                console.log('🎯 [INJECTED] Setting window flag...');
+                window.naukriAutomationRunning = true;
+                console.log('✅ [INJECTED] Window flag set!');
             }
         });
 
+        // Now reload the page so content script picks up the state
+        if (naukriBtn) naukriBtn.innerHTML = '🔄 Reloading page...';
+        console.log('🔄 [POPUP] Reloading page to trigger content script...');
+        
+        await delay(1000);
+        await chrome.tabs.reload(currentTab.id);
+
         // Show success message
-        showSuccess('✅ Naukri automation started!\n\n🟢 Green indicator shows progress.\n\nYou can close this popup.\n\nAutomation will continue in background.\n\nCheck console (F12) for details.', 10000);
+        showSuccess('✅ Naukri automation started!\n\n🟢 Green indicator will appear after reload.\n\nAutomation runs in background.\n\nCheck console (F12) for details.', 10000);
         
         if (naukriBtn) {
             naukriBtn.innerHTML = '✅ Running...';
