@@ -473,7 +473,7 @@ async function startLinkedInAutomation() {
     }
 }
 
-// ==================== NAUKRI AUTOMATION - FIXED VERSION ====================
+// ==================== NAUKRI AUTOMATION - COMPLETE FIXED ====================
 
 async function startNaukriAutomation() {
     if (appState.automation.isRunning) {
@@ -481,7 +481,7 @@ async function startNaukriAutomation() {
         return;
     }
 
-    console.log('🟢 [NAUKRI] Starting from popup...');
+    console.log('🟢 [NAUKRI-POPUP] Starting...\n');
     
     const naukriBtn = document.getElementById('naukri-automation-btn');
     const originalHTML = naukriBtn?.innerHTML || '🟢 Naukri Automation (5 Jobs)';
@@ -500,23 +500,22 @@ async function startNaukriAutomation() {
             throw new Error('No active tab');
         }
 
-        // Navigate to Naukri if not there
+        // Step 1: Navigate to Naukri if needed
         if (!currentTab.url.includes('naukri.com')) {
             if (naukriBtn) naukriBtn.innerHTML = '🟢 Opening Naukri...';
             showInfo('Navigating to Naukri.com...');
             
+            console.log('   🔗 Navigating to Naukri...\n');
             await chrome.tabs.update(currentTab.id, {
                 url: 'https://www.naukri.com/data-analyst-jobs'
             });
             
-            // Wait for page load
             await delay(6000);
-            
-            showInfo('Page loaded! Starting automation...');
+            console.log('   ✅ Page loaded\n');
         }
 
-        // ✅✅✅ CRITICAL: Set Chrome Storage BEFORE anything else! ✅✅✅
-        if (naukriBtn) naukriBtn.innerHTML = '💾 Setting up state...';
+        // Step 2: Set Chrome Storage
+        if (naukriBtn) naukriBtn.innerHTML = '💾 Setting up...';
         
         console.log('💾 [POPUP] Setting Chrome Storage...');
         await chrome.storage.local.set({
@@ -526,29 +525,32 @@ async function startNaukriAutomation() {
             naukri_clicked: [],
             naukri_processed: []
         });
-        console.log('✅ [POPUP] Chrome Storage set successfully!');
+        console.log('✅ [POPUP] Storage set!\n');
 
-        // Set window flag via injection
-        if (naukriBtn) naukriBtn.innerHTML = '🚀 Injecting automation...';
+        // Step 3: Inject script
+        if (naukriBtn) naukriBtn.innerHTML = '📦 Injecting script...';
         
-        await chrome.scripting.executeScript({
-            target: { tabId: currentTab.id },
-            func: () => {
-                console.log('🎯 [INJECTED] Setting window flag...');
-                window.naukriAutomationRunning = true;
-                console.log('✅ [INJECTED] Window flag set!');
-            }
-        });
+        console.log('📦 [POPUP] Injecting naukri-automation.js...');
+        try {
+            await chrome.scripting.executeScript({
+                target: { tabId: currentTab.id },
+                files: ['naukri-automation.js']
+            });
+            console.log('✅ [POPUP] Script injected!\n');
+        } catch (e) {
+            console.log('ℹ️ [POPUP] Script already loaded\n');
+        }
 
-        // Now reload the page so content script picks up the state
-        if (naukriBtn) naukriBtn.innerHTML = '🔄 Reloading page...';
-        console.log('🔄 [POPUP] Reloading page to trigger content script...');
+        // Step 4: Reload page
+        if (naukriBtn) naukriBtn.innerHTML = '🔄 Reloading...';
         
+        console.log('🔄 [POPUP] Reloading page to start automation...');
         await delay(1000);
         await chrome.tabs.reload(currentTab.id);
+        console.log('✅ [POPUP] Page reloading...\n');
 
-        // Show success message
-        showSuccess('✅ Naukri automation started!\n\n🟢 Green indicator will appear after reload.\n\nAutomation runs in background.\n\nCheck console (F12) for details.', 10000);
+        // Show success
+        showSuccess('✅ Naukri automation started!\n\n🟢 Green indicator will appear!\n\nCheck console (F12) for progress.', 10000);
         
         if (naukriBtn) {
             naukriBtn.innerHTML = '✅ Running...';
@@ -565,8 +567,10 @@ async function startNaukriAutomation() {
             appState.automation.isRunning = false;
         }, 3000);
 
+        console.log('✅ [POPUP] Naukri automation setup complete!\n');
+
     } catch (error) {
-        console.error('❌ [POPUP] Naukri error:', error);
+        console.error('❌ [POPUP] Error:', error);
         showError('Failed: ' + error.message);
         
         if (naukriBtn) {
