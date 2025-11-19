@@ -2746,649 +2746,649 @@ Answer:`;
     // ==================== NAUKRI.COM AUTOMATION ====================
     // ==================== NAUKRI.COM AUTOMATION - GUARANTEED WORKING ====================
 
-    // ==================== NAUKRI AUTOMATION - WORKS ON EVERY PAGE ====================
-    // ✅ This script automatically runs on EVERY naukri.com page
-    // ✅ Green indicator will show on every page
-    // ✅ Automation continues across page navigations
-
-    console.log('\n🔧 [NAUKRI] Content script loaded on:', window.location.href.substring(0, 80), '...\n');
-
-    const naukriState = {
-        isRunning: false,
-        processedUrls: new Set(),
-        clickedLinks: new Set(),
-        currentUrl: window.location.href,
-        config: {
-            MAX_JOBS: 5,
-            WAIT_AFTER_CLICK: 3500,
-            WAIT_AFTER_APPLY: 2000,
-            WAIT_FOR_BUTTON_CHECK: 1800,
-            MAX_ATTEMPTS: 30
-        },
-        stats: {
-            applied: 0,
-            skipped: 0,
-            startTime: null
-        }
-    };
-
-    // ==================== CHECK IF AUTOMATION SHOULD CONTINUE ====================
-
-    function checkContinueAutomation() {
-        // Check if automation was running
-        chrome.storage.local.get(['naukriRunning', 'naukriStats', 'naukriClicked'], (data) => {
-            if (data.naukriRunning) {
-                console.log('🔄 Automation is running - continuing on this page...\n');
-
-                // Restore state
-                if (data.naukriStats) {
-                    naukriState.stats = data.naukriStats;
-                }
-                if (data.naukriClicked) {
-                    naukriState.clickedLinks = new Set(data.naukriClicked);
-                }
-
-                naukriState.isRunning = true;
-
-                // Show indicator immediately
-                createIndicator();
-
-                // Continue automation after delay
-                setTimeout(() => {
-                    continueAutomation();
-                }, 1500);
-            }
-        });
-    }
-
-    // Run check on page load
-    checkContinueAutomation();
-
-    // ==================== INDICATOR ====================
-
-    function createIndicator() {
-        // Remove if exists
-        const existing = document.getElementById('naukri-status');
-        if (existing) existing.remove();
-
-        const box = document.createElement('div');
-        box.id = 'naukri-status';
-        box.style.cssText = `
-        position: fixed !important;
-        top: 20px !important;
-        right: 20px !important;
-        background: linear-gradient(135deg, #10b981, #059669) !important;
-        color: white !important;
-        padding: 18px 24px !important;
-        border-radius: 14px !important;
-        font-weight: 700 !important;
-        font-size: 15px !important;
-        z-index: 2147483647 !important;
-        box-shadow: 0 10px 30px rgba(16, 185, 129, 0.8) !important;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif !important;
-        display: flex !important;
-        align-items: center !important;
-        gap: 14px !important;
-        min-width: 350px !important;
-        animation: slideIn 0.4s ease-out !important;
-        border: 3px solid rgba(255, 255, 255, 0.4) !important;
-    `;
-
-        box.innerHTML = `
-        <span style="animation: spin 1s linear infinite; display: inline-block; font-size: 22px;">⚙️</span>
-        <div style="flex: 1;">
-            <div style="font-size: 16px; margin-bottom: 4px; font-weight: 800; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">🟢 Naukri Automation Running</div>
-            <div id="naukri-status-text" style="font-size: 13px; opacity: 0.95; font-weight: 600;">Job ${naukriState.stats.applied + 1} (${naukriState.stats.applied}/${naukriState.config.MAX_JOBS})</div>
-        </div>
-    `;
-
-        document.body.appendChild(box);
-
-        // Add animations
-        if (!document.getElementById('naukri-animations')) {
-            const style = document.createElement('style');
-            style.id = 'naukri-animations';
-            style.textContent = `
-            @keyframes spin {
-                from { transform: rotate(0deg); }
-                to { transform: rotate(360deg); }
-            }
-            @keyframes slideIn {
-                from { opacity: 0; transform: translateX(150px); }
-                to { opacity: 1; transform: translateX(0); }
-            }
-        `;
-            document.head.appendChild(style);
-        }
-
-        console.log('✅ Indicator created on current page\n');
-    }
-
-    function updateStatus(msg) {
-        const txt = document.getElementById('naukri-status-text');
-        if (txt) {
-            txt.textContent = msg;
-        }
-    }
-
-    function removeIndicator() {
-        const box = document.getElementById('naukri-status');
-        if (box) {
-            box.style.transition = 'opacity 0.3s';
-            box.style.opacity = '0';
-            setTimeout(() => box.remove(), 400);
-        }
-
-        // Clear storage
-        chrome.storage.local.remove(['naukriRunning', 'naukriStats', 'naukriClicked']);
-    }
-
-    // ==================== MESSAGE HANDLER ====================
-
-    chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
-        if (req.action === 'START_NAUKRI_AUTOMATION') {
-            console.log('🎯 START message received!\n');
-
-            setTimeout(() => startAutomation(), 300);
-            sendResponse({ success: true });
-            return false;
-        }
-    });
-
-    // ==================== SAVE STATE TO STORAGE ====================
-
-    function saveState() {
-        chrome.storage.local.set({
-            naukriRunning: naukriState.isRunning,
-            naukriStats: naukriState.stats,
-            naukriClicked: Array.from(naukriState.clickedLinks)
-        });
-    }
-
-    // ==================== START AUTOMATION ====================
-
-    async function startAutomation() {
-        console.log('\n' + '='.repeat(100));
-        console.log('🚀 STARTING NAUKRI AUTOMATION');
-        console.log('='.repeat(100) + '\n');
-
-        naukriState.isRunning = true;
-        naukriState.stats.applied = 0;
-        naukriState.stats.skipped = 0;
-        naukriState.stats.startTime = Date.now();
-        naukriState.processedUrls.clear();
-        naukriState.clickedLinks.clear();
-
-        saveState();
-
-        try {
-            createIndicator();
-            updateStatus('Starting...');
-
-            console.log('📍 URL:', window.location.href.substring(0, 80), '...\n');
-
-            // Check Naukri
-            if (!window.location.hostname.includes('naukri.com')) {
-                console.log('❌ Not on Naukri - navigating...\n');
-                window.location.href = 'https://www.naukri.com/data-analyst-jobs';
-                return;
-            }
-            console.log('✅ On Naukri\n');
-
-            // Check login
-            const loginCheck = document.querySelector('.nI-gNb-drawer__icon, .userPro, [class*="user"]');
-            if (!loginCheck) {
-                throw new Error('Not logged in to Naukri');
-            }
-            console.log('✅ Logged in\n');
-
-            // Run
-            await mainLoop();
-
-            // Done
-            const time = ((Date.now() - naukriState.stats.startTime) / 1000).toFixed(1);
-
-            console.log('\n' + '='.repeat(100));
-            console.log('✅ COMPLETED!');
-            console.log(`📊 Applied: ${naukriState.stats.applied}/${naukriState.config.MAX_JOBS}`);
-            console.log(`⏭️  Skipped: ${naukriState.stats.skipped}`);
-            console.log(`⏱️  Time: ${time}s`);
-            console.log('='.repeat(100) + '\n');
-
-            showNotif(`🎉 Done! ${naukriState.stats.applied} jobs`, 'success', 8000);
-
-            naukriState.isRunning = false;
-            saveState();
-            removeIndicator();
-
-        } catch (err) {
-            console.error('\n❌ ERROR:', err.message);
-            showNotif(`❌ ${err.message}`, 'error', 6000);
-            naukriState.isRunning = false;
-            saveState();
-            removeIndicator();
-        }
-    }
-
-    // ==================== CONTINUE AUTOMATION ====================
-
-    async function continueAutomation() {
-        console.log('🔄 Continuing automation on current page...\n');
-
-        updateStatus(`Processing... (${naukriState.stats.applied}/${naukriState.config.MAX_JOBS})`);
-
-        try {
-            // Check if on job page
-            if (!isJobPage(window.location.href)) {
-                console.log('⚠️  Not on job page - waiting...\n');
-                return;
-            }
-
-            console.log('✅ On job page\n');
-
-            // Process job
-            await processJob();
-
-            saveState();
-
-            // Check target
-            if (naukriState.stats.applied >= naukriState.config.MAX_JOBS) {
-                console.log('\n🎯 TARGET REACHED!\n');
-
-                const time = ((Date.now() - naukriState.stats.startTime) / 1000).toFixed(1);
-
-                showNotif(`🎉 Done! ${naukriState.stats.applied} jobs in ${time}s`, 'success', 8000);
-
-                naukriState.isRunning = false;
-                saveState();
-                removeIndicator();
-                return;
-            }
-
-            // Find next
-            console.log('🔍 Finding next job...\n');
-            updateStatus('Finding next job...');
-
-            if (!await findNextJob()) {
-                console.log('❌ No more jobs\n');
-
-                showNotif(`⚠️ Completed ${naukriState.stats.applied} jobs`, 'success', 6000);
-
-                naukriState.isRunning = false;
-                saveState();
-                removeIndicator();
-                return;
-            }
-
-            console.log('✅ Clicked next job - waiting for new page...\n');
-
-            // State saved - will continue on new page automatically!
-
-        } catch (err) {
-            console.error('\n❌ ERROR:', err.message);
-            showNotif(`❌ ${err.message}`, 'error', 6000);
-            naukriState.isRunning = false;
-            saveState();
-            removeIndicator();
-        }
-    }
-
-    // ==================== MAIN LOOP ====================
-
-    async function mainLoop() {
-        const url = window.location.href;
-
-        console.log('📍 Current page:');
-        console.log(`   URL: ${url.substring(0, 80)}...`);
-        console.log(`   Is search: ${isSearchPage(url)}`);
-        console.log(`   Is job: ${isJobPage(url)}\n`);
-
-        // If search page, click first
-        if (isSearchPage(url)) {
-            console.log('═'.repeat(100));
-            console.log('📄 ON SEARCH PAGE - CLICKING FIRST JOB');
-            console.log('═'.repeat(100) + '\n');
-
-            updateStatus('Clicking first job...');
-
-            if (!await clickFirstJob()) {
-                throw new Error('No jobs found');
-            }
-
-            console.log('✅ First job clicked - page will reload with new URL\n');
-
-            // Save state before navigation
-            saveState();
-
-            // Wait for navigation - content script will auto-continue on new page
-            return;
-        }
-
-        // If already on job page, process it
-        if (isJobPage(url)) {
-            await continueAutomation();
-        }
-    }
-
-    // ==================== CLICK FIRST JOB ====================
-
-    async function clickFirstJob() {
-        console.log('🎯 Finding first job:\n');
-
-        const selectors = [
-            'a[href*="job-listings"]',
-            '.jobTuple a',
-            'article a'
-        ];
-
-        for (const sel of selectors) {
-            const links = document.querySelectorAll(sel);
-            console.log(`   ${sel}: ${links.length} found`);
-
-            if (links.length > 0) {
-                for (const link of links) {
-                    const text = link.textContent.trim();
-                    if (text.length >= 8) {
-                        console.log(`   ✅ Clicking: "${text.substring(0, 50)}..."\n`);
-
-                        naukriState.clickedLinks.add(link.href);
-                        saveState();
-
-                        link.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        await delay(700);
-
-                        link.style.backgroundColor = '#bfdbfe';
-                        link.click();
-
-                        return true;
-                    }
-                }
-            }
-        }
-
-        return false;
-    }
-
-    // ==================== FIND NEXT JOB ====================
-
-    async function findNextJob() {
-        console.log('   🎯 Finding next job:\n');
-
-        // Strategy 1: Right sidebar
-        console.log('   [1] Right sidebar...');
-        if (await findInSidebar()) {
-            console.log('   ✅ Found!\n');
-            return true;
-        }
-
-        // Strategy 2: Scroll
-        console.log('\n   [2] Scrolling...');
-        if (await findByScroll()) {
-            console.log('   ✅ Found!\n');
-            return true;
-        }
-
-        // Strategy 3: Any visible
-        console.log('\n   [3] Any visible...');
-        if (await findAnyVisible()) {
-            console.log('   ✅ Found!\n');
-            return true;
-        }
-
-        // Strategy 4: Desperate
-        console.log('\n   [4] Desperate...');
-        if (await findDesperate()) {
-            console.log('   ✅ Found!\n');
-            return true;
-        }
-
-        return false;
-    }
-
-    async function findInSidebar() {
-        const headers = document.querySelectorAll('h2, h3, h4, div, p, span');
-
-        for (const h of headers) {
-            const txt = h.textContent.toLowerCase();
+    // // ==================== NAUKRI AUTOMATION - WORKS ON EVERY PAGE ====================
+    // // ✅ This script automatically runs on EVERY naukri.com page
+    // // ✅ Green indicator will show on every page
+    // // ✅ Automation continues across page navigations
+
+    // console.log('\n🔧 [NAUKRI] Content script loaded on:', window.location.href.substring(0, 80), '...\n');
+
+    // const naukriState = {
+    //     isRunning: false,
+    //     processedUrls: new Set(),
+    //     clickedLinks: new Set(),
+    //     currentUrl: window.location.href,
+    //     config: {
+    //         MAX_JOBS: 5,
+    //         WAIT_AFTER_CLICK: 3500,
+    //         WAIT_AFTER_APPLY: 2000,
+    //         WAIT_FOR_BUTTON_CHECK: 1800,
+    //         MAX_ATTEMPTS: 30
+    //     },
+    //     stats: {
+    //         applied: 0,
+    //         skipped: 0,
+    //         startTime: null
+    //     }
+    // };
+
+    // // ==================== CHECK IF AUTOMATION SHOULD CONTINUE ====================
+
+    // function checkContinueAutomation() {
+    //     // Check if automation was running
+    //     chrome.storage.local.get(['naukriRunning', 'naukriStats', 'naukriClicked'], (data) => {
+    //         if (data.naukriRunning) {
+    //             console.log('🔄 Automation is running - continuing on this page...\n');
+
+    //             // Restore state
+    //             if (data.naukriStats) {
+    //                 naukriState.stats = data.naukriStats;
+    //             }
+    //             if (data.naukriClicked) {
+    //                 naukriState.clickedLinks = new Set(data.naukriClicked);
+    //             }
+
+    //             naukriState.isRunning = true;
+
+    //             // Show indicator immediately
+    //             createIndicator();
+
+    //             // Continue automation after delay
+    //             setTimeout(() => {
+    //                 continueAutomation();
+    //             }, 1500);
+    //         }
+    //     });
+    // }
+
+    // // Run check on page load
+    // checkContinueAutomation();
+
+    // // ==================== INDICATOR ====================
+
+    // function createIndicator() {
+    //     // Remove if exists
+    //     const existing = document.getElementById('naukri-status');
+    //     if (existing) existing.remove();
+
+    //     const box = document.createElement('div');
+    //     box.id = 'naukri-status';
+    //     box.style.cssText = `
+    //     position: fixed !important;
+    //     top: 20px !important;
+    //     right: 20px !important;
+    //     background: linear-gradient(135deg, #10b981, #059669) !important;
+    //     color: white !important;
+    //     padding: 18px 24px !important;
+    //     border-radius: 14px !important;
+    //     font-weight: 700 !important;
+    //     font-size: 15px !important;
+    //     z-index: 2147483647 !important;
+    //     box-shadow: 0 10px 30px rgba(16, 185, 129, 0.8) !important;
+    //     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif !important;
+    //     display: flex !important;
+    //     align-items: center !important;
+    //     gap: 14px !important;
+    //     min-width: 350px !important;
+    //     animation: slideIn 0.4s ease-out !important;
+    //     border: 3px solid rgba(255, 255, 255, 0.4) !important;
+    // `;
+
+    //     box.innerHTML = `
+    //     <span style="animation: spin 1s linear infinite; display: inline-block; font-size: 22px;">⚙️</span>
+    //     <div style="flex: 1;">
+    //         <div style="font-size: 16px; margin-bottom: 4px; font-weight: 800; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">🟢 Naukri Automation Running</div>
+    //         <div id="naukri-status-text" style="font-size: 13px; opacity: 0.95; font-weight: 600;">Job ${naukriState.stats.applied + 1} (${naukriState.stats.applied}/${naukriState.config.MAX_JOBS})</div>
+    //     </div>
+    // `;
+
+    //     document.body.appendChild(box);
+
+    //     // Add animations
+    //     if (!document.getElementById('naukri-animations')) {
+    //         const style = document.createElement('style');
+    //         style.id = 'naukri-animations';
+    //         style.textContent = `
+    //         @keyframes spin {
+    //             from { transform: rotate(0deg); }
+    //             to { transform: rotate(360deg); }
+    //         }
+    //         @keyframes slideIn {
+    //             from { opacity: 0; transform: translateX(150px); }
+    //             to { opacity: 1; transform: translateX(0); }
+    //         }
+    //     `;
+    //         document.head.appendChild(style);
+    //     }
+
+    //     console.log('✅ Indicator created on current page\n');
+    // }
+
+    // function updateStatus(msg) {
+    //     const txt = document.getElementById('naukri-status-text');
+    //     if (txt) {
+    //         txt.textContent = msg;
+    //     }
+    // }
+
+    // function removeIndicator() {
+    //     const box = document.getElementById('naukri-status');
+    //     if (box) {
+    //         box.style.transition = 'opacity 0.3s';
+    //         box.style.opacity = '0';
+    //         setTimeout(() => box.remove(), 400);
+    //     }
+
+    //     // Clear storage
+    //     chrome.storage.local.remove(['naukriRunning', 'naukriStats', 'naukriClicked']);
+    // }
+
+    // // ==================== MESSAGE HANDLER ====================
+
+    // chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
+    //     if (req.action === 'START_NAUKRI_AUTOMATION') {
+    //         console.log('🎯 START message received!\n');
+
+    //         setTimeout(() => startAutomation(), 300);
+    //         sendResponse({ success: true });
+    //         return false;
+    //     }
+    // });
+
+    // // ==================== SAVE STATE TO STORAGE ====================
+
+    // function saveState() {
+    //     chrome.storage.local.set({
+    //         naukriRunning: naukriState.isRunning,
+    //         naukriStats: naukriState.stats,
+    //         naukriClicked: Array.from(naukriState.clickedLinks)
+    //     });
+    // }
+
+    // // ==================== START AUTOMATION ====================
+
+    // async function startAutomation() {
+    //     console.log('\n' + '='.repeat(100));
+    //     console.log('🚀 STARTING NAUKRI AUTOMATION');
+    //     console.log('='.repeat(100) + '\n');
+
+    //     naukriState.isRunning = true;
+    //     naukriState.stats.applied = 0;
+    //     naukriState.stats.skipped = 0;
+    //     naukriState.stats.startTime = Date.now();
+    //     naukriState.processedUrls.clear();
+    //     naukriState.clickedLinks.clear();
+
+    //     saveState();
+
+    //     try {
+    //         createIndicator();
+    //         updateStatus('Starting...');
+
+    //         console.log('📍 URL:', window.location.href.substring(0, 80), '...\n');
+
+    //         // Check Naukri
+    //         if (!window.location.hostname.includes('naukri.com')) {
+    //             console.log('❌ Not on Naukri - navigating...\n');
+    //             window.location.href = 'https://www.naukri.com/data-analyst-jobs';
+    //             return;
+    //         }
+    //         console.log('✅ On Naukri\n');
+
+    //         // Check login
+    //         const loginCheck = document.querySelector('.nI-gNb-drawer__icon, .userPro, [class*="user"]');
+    //         if (!loginCheck) {
+    //             throw new Error('Not logged in to Naukri');
+    //         }
+    //         console.log('✅ Logged in\n');
+
+    //         // Run
+    //         await mainLoop();
+
+    //         // Done
+    //         const time = ((Date.now() - naukriState.stats.startTime) / 1000).toFixed(1);
+
+    //         console.log('\n' + '='.repeat(100));
+    //         console.log('✅ COMPLETED!');
+    //         console.log(`📊 Applied: ${naukriState.stats.applied}/${naukriState.config.MAX_JOBS}`);
+    //         console.log(`⏭️  Skipped: ${naukriState.stats.skipped}`);
+    //         console.log(`⏱️  Time: ${time}s`);
+    //         console.log('='.repeat(100) + '\n');
+
+    //         showNotif(`🎉 Done! ${naukriState.stats.applied} jobs`, 'success', 8000);
+
+    //         naukriState.isRunning = false;
+    //         saveState();
+    //         removeIndicator();
+
+    //     } catch (err) {
+    //         console.error('\n❌ ERROR:', err.message);
+    //         showNotif(`❌ ${err.message}`, 'error', 6000);
+    //         naukriState.isRunning = false;
+    //         saveState();
+    //         removeIndicator();
+    //     }
+    // }
+
+    // // ==================== CONTINUE AUTOMATION ====================
+
+    // async function continueAutomation() {
+    //     console.log('🔄 Continuing automation on current page...\n');
+
+    //     updateStatus(`Processing... (${naukriState.stats.applied}/${naukriState.config.MAX_JOBS})`);
+
+    //     try {
+    //         // Check if on job page
+    //         if (!isJobPage(window.location.href)) {
+    //             console.log('⚠️  Not on job page - waiting...\n');
+    //             return;
+    //         }
+
+    //         console.log('✅ On job page\n');
+
+    //         // Process job
+    //         await processJob();
+
+    //         saveState();
+
+    //         // Check target
+    //         if (naukriState.stats.applied >= naukriState.config.MAX_JOBS) {
+    //             console.log('\n🎯 TARGET REACHED!\n');
+
+    //             const time = ((Date.now() - naukriState.stats.startTime) / 1000).toFixed(1);
+
+    //             showNotif(`🎉 Done! ${naukriState.stats.applied} jobs in ${time}s`, 'success', 8000);
+
+    //             naukriState.isRunning = false;
+    //             saveState();
+    //             removeIndicator();
+    //             return;
+    //         }
+
+    //         // Find next
+    //         console.log('🔍 Finding next job...\n');
+    //         updateStatus('Finding next job...');
+
+    //         if (!await findNextJob()) {
+    //             console.log('❌ No more jobs\n');
+
+    //             showNotif(`⚠️ Completed ${naukriState.stats.applied} jobs`, 'success', 6000);
+
+    //             naukriState.isRunning = false;
+    //             saveState();
+    //             removeIndicator();
+    //             return;
+    //         }
+
+    //         console.log('✅ Clicked next job - waiting for new page...\n');
+
+    //         // State saved - will continue on new page automatically!
+
+    //     } catch (err) {
+    //         console.error('\n❌ ERROR:', err.message);
+    //         showNotif(`❌ ${err.message}`, 'error', 6000);
+    //         naukriState.isRunning = false;
+    //         saveState();
+    //         removeIndicator();
+    //     }
+    // }
+
+    // // ==================== MAIN LOOP ====================
+
+    // async function mainLoop() {
+    //     const url = window.location.href;
+
+    //     console.log('📍 Current page:');
+    //     console.log(`   URL: ${url.substring(0, 80)}...`);
+    //     console.log(`   Is search: ${isSearchPage(url)}`);
+    //     console.log(`   Is job: ${isJobPage(url)}\n`);
+
+    //     // If search page, click first
+    //     if (isSearchPage(url)) {
+    //         console.log('═'.repeat(100));
+    //         console.log('📄 ON SEARCH PAGE - CLICKING FIRST JOB');
+    //         console.log('═'.repeat(100) + '\n');
+
+    //         updateStatus('Clicking first job...');
+
+    //         if (!await clickFirstJob()) {
+    //             throw new Error('No jobs found');
+    //         }
+
+    //         console.log('✅ First job clicked - page will reload with new URL\n');
+
+    //         // Save state before navigation
+    //         saveState();
+
+    //         // Wait for navigation - content script will auto-continue on new page
+    //         return;
+    //     }
+
+    //     // If already on job page, process it
+    //     if (isJobPage(url)) {
+    //         await continueAutomation();
+    //     }
+    // }
+
+    // // ==================== CLICK FIRST JOB ====================
+
+    // async function clickFirstJob() {
+    //     console.log('🎯 Finding first job:\n');
+
+    //     const selectors = [
+    //         'a[href*="job-listings"]',
+    //         '.jobTuple a',
+    //         'article a'
+    //     ];
+
+    //     for (const sel of selectors) {
+    //         const links = document.querySelectorAll(sel);
+    //         console.log(`   ${sel}: ${links.length} found`);
+
+    //         if (links.length > 0) {
+    //             for (const link of links) {
+    //                 const text = link.textContent.trim();
+    //                 if (text.length >= 8) {
+    //                     console.log(`   ✅ Clicking: "${text.substring(0, 50)}..."\n`);
+
+    //                     naukriState.clickedLinks.add(link.href);
+    //                     saveState();
+
+    //                     link.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    //                     await delay(700);
+
+    //                     link.style.backgroundColor = '#bfdbfe';
+    //                     link.click();
+
+    //                     return true;
+    //                 }
+    //             }
+    //         }
+    //     }
+
+    //     return false;
+    // }
+
+    // // ==================== FIND NEXT JOB ====================
+
+    // async function findNextJob() {
+    //     console.log('   🎯 Finding next job:\n');
+
+    //     // Strategy 1: Right sidebar
+    //     console.log('   [1] Right sidebar...');
+    //     if (await findInSidebar()) {
+    //         console.log('   ✅ Found!\n');
+    //         return true;
+    //     }
+
+    //     // Strategy 2: Scroll
+    //     console.log('\n   [2] Scrolling...');
+    //     if (await findByScroll()) {
+    //         console.log('   ✅ Found!\n');
+    //         return true;
+    //     }
+
+    //     // Strategy 3: Any visible
+    //     console.log('\n   [3] Any visible...');
+    //     if (await findAnyVisible()) {
+    //         console.log('   ✅ Found!\n');
+    //         return true;
+    //     }
+
+    //     // Strategy 4: Desperate
+    //     console.log('\n   [4] Desperate...');
+    //     if (await findDesperate()) {
+    //         console.log('   ✅ Found!\n');
+    //         return true;
+    //     }
+
+    //     return false;
+    // }
+
+    // async function findInSidebar() {
+    //     const headers = document.querySelectorAll('h2, h3, h4, div, p, span');
+
+    //     for (const h of headers) {
+    //         const txt = h.textContent.toLowerCase();
 
-            if (txt.includes('might') || txt.includes('interested') || txt.includes('similar')) {
-                console.log(`      ✓ Header: "${h.textContent.substring(0, 35)}..."`);
+    //         if (txt.includes('might') || txt.includes('interested') || txt.includes('similar')) {
+    //             console.log(`      ✓ Header: "${h.textContent.substring(0, 35)}..."`);
 
-                let parent = h;
-                for (let i = 0; i < 5; i++) {
-                    if (parent.parentElement) parent = parent.parentElement;
-                }
+    //             let parent = h;
+    //             for (let i = 0; i < 5; i++) {
+    //                 if (parent.parentElement) parent = parent.parentElement;
+    //             }
 
-                const links = parent.querySelectorAll('a[href*="job-listings"]');
-                console.log(`      ✓ ${links.length} links`);
+    //             const links = parent.querySelectorAll('a[href*="job-listings"]');
+    //             console.log(`      ✓ ${links.length} links`);
 
-                for (const link of links) {
-                    if (await tryClick(link)) return true;
-                }
-            }
-        }
+    //             for (const link of links) {
+    //                 if (await tryClick(link)) return true;
+    //             }
+    //         }
+    //     }
 
-        return false;
-    }
+    //     return false;
+    // }
 
-    async function findByScroll() {
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-        await delay(2500);
+    // async function findByScroll() {
+    //     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    //     await delay(2500);
 
-        for (const link of document.querySelectorAll('a[href*="job-listings"]')) {
-            if (await tryClick(link)) return true;
-        }
+    //     for (const link of document.querySelectorAll('a[href*="job-listings"]')) {
+    //         if (await tryClick(link)) return true;
+    //     }
 
-        return false;
-    }
+    //     return false;
+    // }
 
-    async function findAnyVisible() {
-        const all = document.querySelectorAll('a[href*="job-listings"]');
-        const visible = Array.from(all).filter(l => isVisible(l));
-
-        console.log(`      ${visible.length} visible`);
-
-        for (const link of visible) {
-            if (await tryClick(link)) return true;
-        }
-
-        return false;
-    }
-
-    async function findDesperate() {
-        const all = document.querySelectorAll('a[href*="job-listings"]');
-
-        for (const link of all) {
-            if (naukriState.clickedLinks.has(link.href)) continue;
-
-            console.log(`      🚨 Click: "${link.textContent.trim().substring(0, 40)}..."`);
-
-            naukriState.clickedLinks.add(link.href);
-            saveState();
-
-            link.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            await delay(600);
-            link.click();
-
-            return true;
-        }
-
-        return false;
-    }
-
-    async function tryClick(link) {
-        if (!isVisible(link)) return false;
-
-        const txt = link.textContent.trim();
-        if (txt.length < 8) return false;
-
-        const href = link.href;
-        if (naukriState.clickedLinks.has(href)) return false;
-
-        console.log(`      ✅ "${txt.substring(0, 45)}..."`);
-
-        naukriState.clickedLinks.add(href);
-        saveState();
-
-        link.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        await delay(500);
-
-        link.style.backgroundColor = '#bfdbfe';
-        link.click();
-        await delay(400);
-
-        return true;
-    }
-
-    // ==================== PROCESS JOB ====================
-
-    async function processJob() {
-        const url = window.location.href;
-
-        if (naukriState.processedUrls.has(url)) {
-            console.log('⏭️  Already processed\n');
-            return;
-        }
-
-        naukriState.processedUrls.add(url);
-
-        const title = getTitle();
-        console.log(`📋 Job: ${title.substring(0, 60)}...`);
-
-        await delay(naukriState.config.WAIT_FOR_BUTTON_CHECK);
-
-        const btn = getButtonType();
-        console.log(`🔘 Button: ${btn}\n`);
-
-        if (btn === 'APPLY') {
-            console.log('✅ Applying...\n');
-            updateStatus('Applying...');
-
-            if (await apply()) {
-                naukriState.stats.applied++;
-                saveState();
-
-                console.log(`🎉 SUCCESS #${naukriState.stats.applied}\n`);
-                showNotif(`✅ ${naukriState.stats.applied}/${naukriState.config.MAX_JOBS}`, 'success', 2000);
-
-                await delay(naukriState.config.WAIT_AFTER_APPLY);
-            }
-        } else {
-            console.log('⏭️  Skipping\n');
-            naukriState.stats.skipped++;
-            saveState();
-        }
-    }
-
-    function getTitle() {
-        for (const s of ['h1', '.jd-header-title', '[class*="title"]']) {
-            const e = document.querySelector(s);
-            if (e && e.textContent.trim()) return e.textContent.trim();
-        }
-        return 'Unknown';
-    }
-
-    function getButtonType() {
-        for (const b of document.querySelectorAll('button')) {
-            if (!isVisible(b)) continue;
-            const t = b.textContent.toLowerCase().trim();
-            if (t.includes('company')) return 'COMPANY_SITE';
-            if (t === 'apply' || t === 'apply now') return 'APPLY';
-        }
-        return 'UNKNOWN';
-    }
-
-    async function apply() {
-        try {
-            let btn = null;
-            for (const b of document.querySelectorAll('button')) {
-                if (!isVisible(b)) continue;
-                const t = b.textContent.toLowerCase().trim();
-                if (t === 'apply' || t === 'apply now') {
-                    btn = b;
-                    break;
-                }
-            }
-
-            if (!btn) return false;
-
-            btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            await delay(600);
-            btn.click();
-            await delay(2000);
-
-            const modal = document.querySelector('.modal, [role="dialog"]');
-            if (modal && isVisible(modal)) {
-                for (const f of modal.querySelectorAll('input, select')) {
-                    if (!isVisible(f)) continue;
-                    if (f.type === 'checkbox') f.checked = true;
-                    else if (f.tagName === 'SELECT' && f.options.length > 1) f.selectedIndex = 1;
-                    else if (f.type !== 'file' && f.type !== 'hidden') f.value = 'Demo';
-                    await delay(100);
-                }
-
-                const sub = modal.querySelector('button[type="submit"]');
-                if (sub) {
-                    await delay(500);
-                    sub.click();
-                    await delay(1500);
-                }
-            }
-
-            return true;
-        } catch (e) {
-            return false;
-        }
-    }
-
-    // ==================== HELPERS ====================
-
-    function isSearchPage(url) {
-        return url.includes('/data-analyst-jobs') && !url.includes('job-listings');
-    }
-
-    function isJobPage(url) {
-        return url.includes('job-listings');
-    }
-
-    function isVisible(el) {
-        if (!el) return false;
-        const r = el.getBoundingClientRect();
-        const s = window.getComputedStyle(el);
-        return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
-    }
-
-    function delay(ms) {
-        return new Promise(r => setTimeout(r, ms));
-    }
-
-    function showNotif(msg, type = 'info', dur = 3000) {
-        const n = document.createElement('div');
-        n.style.cssText = `
-        position: fixed !important;
-        top: 95px !important;
-        right: 20px !important;
-        background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'} !important;
-        color: white !important;
-        padding: 14px 22px !important;
-        border-radius: 10px !important;
-        font-size: 15px !important;
-        font-weight: 700 !important;
-        z-index: 2147483646 !important;
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4) !important;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif !important;
-    `;
-
-        n.textContent = msg;
-        document.body.appendChild(n);
-
-        setTimeout(() => {
-            n.style.opacity = '0';
-            setTimeout(() => n.remove(), 300);
-        }, dur);
-    }
-
-    console.log('✅ Content script ready and waiting for commands!\n');
+    // async function findAnyVisible() {
+    //     const all = document.querySelectorAll('a[href*="job-listings"]');
+    //     const visible = Array.from(all).filter(l => isVisible(l));
+
+    //     console.log(`      ${visible.length} visible`);
+
+    //     for (const link of visible) {
+    //         if (await tryClick(link)) return true;
+    //     }
+
+    //     return false;
+    // }
+
+    // async function findDesperate() {
+    //     const all = document.querySelectorAll('a[href*="job-listings"]');
+
+    //     for (const link of all) {
+    //         if (naukriState.clickedLinks.has(link.href)) continue;
+
+    //         console.log(`      🚨 Click: "${link.textContent.trim().substring(0, 40)}..."`);
+
+    //         naukriState.clickedLinks.add(link.href);
+    //         saveState();
+
+    //         link.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    //         await delay(600);
+    //         link.click();
+
+    //         return true;
+    //     }
+
+    //     return false;
+    // }
+
+    // async function tryClick(link) {
+    //     if (!isVisible(link)) return false;
+
+    //     const txt = link.textContent.trim();
+    //     if (txt.length < 8) return false;
+
+    //     const href = link.href;
+    //     if (naukriState.clickedLinks.has(href)) return false;
+
+    //     console.log(`      ✅ "${txt.substring(0, 45)}..."`);
+
+    //     naukriState.clickedLinks.add(href);
+    //     saveState();
+
+    //     link.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    //     await delay(500);
+
+    //     link.style.backgroundColor = '#bfdbfe';
+    //     link.click();
+    //     await delay(400);
+
+    //     return true;
+    // }
+
+    // // ==================== PROCESS JOB ====================
+
+    // async function processJob() {
+    //     const url = window.location.href;
+
+    //     if (naukriState.processedUrls.has(url)) {
+    //         console.log('⏭️  Already processed\n');
+    //         return;
+    //     }
+
+    //     naukriState.processedUrls.add(url);
+
+    //     const title = getTitle();
+    //     console.log(`📋 Job: ${title.substring(0, 60)}...`);
+
+    //     await delay(naukriState.config.WAIT_FOR_BUTTON_CHECK);
+
+    //     const btn = getButtonType();
+    //     console.log(`🔘 Button: ${btn}\n`);
+
+    //     if (btn === 'APPLY') {
+    //         console.log('✅ Applying...\n');
+    //         updateStatus('Applying...');
+
+    //         if (await apply()) {
+    //             naukriState.stats.applied++;
+    //             saveState();
+
+    //             console.log(`🎉 SUCCESS #${naukriState.stats.applied}\n`);
+    //             showNotif(`✅ ${naukriState.stats.applied}/${naukriState.config.MAX_JOBS}`, 'success', 2000);
+
+    //             await delay(naukriState.config.WAIT_AFTER_APPLY);
+    //         }
+    //     } else {
+    //         console.log('⏭️  Skipping\n');
+    //         naukriState.stats.skipped++;
+    //         saveState();
+    //     }
+    // }
+
+    // function getTitle() {
+    //     for (const s of ['h1', '.jd-header-title', '[class*="title"]']) {
+    //         const e = document.querySelector(s);
+    //         if (e && e.textContent.trim()) return e.textContent.trim();
+    //     }
+    //     return 'Unknown';
+    // }
+
+    // function getButtonType() {
+    //     for (const b of document.querySelectorAll('button')) {
+    //         if (!isVisible(b)) continue;
+    //         const t = b.textContent.toLowerCase().trim();
+    //         if (t.includes('company')) return 'COMPANY_SITE';
+    //         if (t === 'apply' || t === 'apply now') return 'APPLY';
+    //     }
+    //     return 'UNKNOWN';
+    // }
+
+    // async function apply() {
+    //     try {
+    //         let btn = null;
+    //         for (const b of document.querySelectorAll('button')) {
+    //             if (!isVisible(b)) continue;
+    //             const t = b.textContent.toLowerCase().trim();
+    //             if (t === 'apply' || t === 'apply now') {
+    //                 btn = b;
+    //                 break;
+    //             }
+    //         }
+
+    //         if (!btn) return false;
+
+    //         btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    //         await delay(600);
+    //         btn.click();
+    //         await delay(2000);
+
+    //         const modal = document.querySelector('.modal, [role="dialog"]');
+    //         if (modal && isVisible(modal)) {
+    //             for (const f of modal.querySelectorAll('input, select')) {
+    //                 if (!isVisible(f)) continue;
+    //                 if (f.type === 'checkbox') f.checked = true;
+    //                 else if (f.tagName === 'SELECT' && f.options.length > 1) f.selectedIndex = 1;
+    //                 else if (f.type !== 'file' && f.type !== 'hidden') f.value = 'Demo';
+    //                 await delay(100);
+    //             }
+
+    //             const sub = modal.querySelector('button[type="submit"]');
+    //             if (sub) {
+    //                 await delay(500);
+    //                 sub.click();
+    //                 await delay(1500);
+    //             }
+    //         }
+
+    //         return true;
+    //     } catch (e) {
+    //         return false;
+    //     }
+    // }
+
+    // // ==================== HELPERS ====================
+
+    // function isSearchPage(url) {
+    //     return url.includes('/data-analyst-jobs') && !url.includes('job-listings');
+    // }
+
+    // function isJobPage(url) {
+    //     return url.includes('job-listings');
+    // }
+
+    // function isVisible(el) {
+    //     if (!el) return false;
+    //     const r = el.getBoundingClientRect();
+    //     const s = window.getComputedStyle(el);
+    //     return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
+    // }
+
+    // function delay(ms) {
+    //     return new Promise(r => setTimeout(r, ms));
+    // }
+
+    // function showNotif(msg, type = 'info', dur = 3000) {
+    //     const n = document.createElement('div');
+    //     n.style.cssText = `
+    //     position: fixed !important;
+    //     top: 95px !important;
+    //     right: 20px !important;
+    //     background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'} !important;
+    //     color: white !important;
+    //     padding: 14px 22px !important;
+    //     border-radius: 10px !important;
+    //     font-size: 15px !important;
+    //     font-weight: 700 !important;
+    //     z-index: 2147483646 !important;
+    //     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4) !important;
+    //     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif !important;
+    // `;
+
+    //     n.textContent = msg;
+    //     document.body.appendChild(n);
+
+    //     setTimeout(() => {
+    //         n.style.opacity = '0';
+    //         setTimeout(() => n.remove(), 300);
+    //     }, dur);
+    // }
+
+    // console.log('✅ Content script ready and waiting for commands!\n');
 
     // ==================== END NAUKRI AUTOMATION ====================
 
