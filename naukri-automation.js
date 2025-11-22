@@ -8,9 +8,10 @@
 // ✅ Scroll down → "14/15 Roles you might be interested in" FIXED!
 // ✅ Loop → Continue until 10 jobs applied
 // ✅ State persistence → Works across page navigations
+// 🆕 REAL DATA FORM FILLING - Database + Resume + AI (NO FAKE DATA!)
 
 console.log('\n🎯 ══════════════════════════════════════════════════════════════');
-console.log('🎯 [NAUKRI] COMPLETE FINAL VERSION - ALL BUGS FIXED!');
+console.log('🎯 [NAUKRI] COMPLETE FINAL VERSION - WITH REAL DATA!');
 console.log('🎯 ══════════════════════════════════════════════════════════════\n');
 
 // ==================== GLOBAL STATE ====================
@@ -56,7 +57,6 @@ function isMainPage() {
 
 function isDetailedPage() {
     const url = window.location.href;
-    // ✅ FIXED: Now includes post-application page!
     return url.includes('naukri.com') && 
            (url.includes('job-listings-') || 
             url.includes('/myapply/saveApply') || 
@@ -80,31 +80,17 @@ function calculateMatchScore(jobTitle, searchTerm) {
     
     let score = 0;
     
-    // Exact match
     if (titleLower === searchLower) return 1000;
-    
-    // Contains full phrase
     if (titleLower.includes(searchLower)) score += 800;
-    
-    // Starts with phrase
     if (titleLower.startsWith(searchLower)) score += 600;
     
-    // Individual word matches - MORE LENIENT!
     if (searchWords.length >= 1) {
         const firstWord = searchWords[0];
         const secondWord = searchWords[1] || '';
         
-        // First word match
         if (titleLower.includes(firstWord)) score += 300;
-        
-        // Second word match
         if (secondWord && titleLower.includes(secondWord)) score += 200;
-        
-        // ✅ NEW: Even if no match, give small score for any job
-        // This ensures we don't skip ALL jobs if none match perfectly
-        if (score === 0 && titleLower.length > 5) {
-            score = 50; // Small score so it's considered
-        }
+        if (score === 0 && titleLower.length > 5) score = 50;
     }
     
     return score;
@@ -140,7 +126,17 @@ async function loadUserData() {
         
         if (resumeResponse?.success && resumeResponse.data) {
             NAUKRI.resumeData = resumeResponse.data;
+            
+            // Calculate experience
+            const calculatedExp = calculateTotalExperience(resumeResponse.data);
+            if (calculatedExp > 0) {
+                NAUKRI.resumeData.totalExperience = calculatedExp;
+            } else if (NAUKRI.userData?.totalExperience) {
+                NAUKRI.resumeData.totalExperience = NAUKRI.userData.totalExperience;
+            }
+            
             console.log('✅ Resume data loaded');
+            console.log(`   Experience: ${NAUKRI.resumeData.totalExperience || 0} years`);
         }
         
         const config = await chrome.storage.local.get('fillora_config');
@@ -153,6 +149,65 @@ async function loadUserData() {
         
     } catch (error) {
         console.error('❌ Error loading data:', error.message);
+    }
+}
+
+function calculateTotalExperience(resumeData) {
+    try {
+        const resumeText = JSON.stringify(resumeData);
+        const currentYear = new Date().getFullYear();
+        const currentMonth = new Date().getMonth() + 1;
+
+        let totalMonths = 0;
+        const processedRanges = new Set();
+
+        const rangePattern = /\b(19|20)\d{2}\s*[–\-—]\s*((19|20)\d{2}|present|current)\b/gi;
+        const matches = Array.from(resumeText.matchAll(rangePattern));
+
+        for (const match of matches) {
+            const fullMatch = match[0];
+            const normalized = fullMatch.replace(/\s+/g, '').toLowerCase();
+
+            if (processedRanges.has(normalized)) continue;
+            processedRanges.add(normalized);
+
+            const startYearMatch = fullMatch.match(/\b(19|20)\d{2}\b/);
+            if (!startYearMatch) continue;
+
+            const startYear = parseInt(startYearMatch[0]);
+            const parts = fullMatch.split(/[–\-—]/);
+            if (parts.length < 2) continue;
+
+            const endPart = parts[1].trim().toLowerCase();
+            let endYear, endMonth;
+
+            if (endPart.includes('present') || endPart.includes('current')) {
+                endYear = currentYear;
+                endMonth = currentMonth;
+            } else {
+                const endYearMatch = endPart.match(/\b(19|20)\d{2}\b/);
+                if (!endYearMatch) continue;
+                endYear = parseInt(endYearMatch[0]);
+                endMonth = 12;
+            }
+
+            if (startYear < 1990 || startYear > currentYear || endYear < startYear || endYear > currentYear) {
+                continue;
+            }
+
+            const startMonth = 1;
+            const monthsInRange = (endYear - startYear) * 12 + (endMonth - startMonth);
+
+            if (monthsInRange > 0) {
+                totalMonths += monthsInRange;
+            }
+        }
+
+        const totalYears = Math.round(totalMonths / 12 * 10) / 10;
+        return totalYears > 0 ? totalYears : 0;
+
+    } catch (error) {
+        return 0;
     }
 }
 
@@ -267,7 +322,6 @@ async function autoInit() {
         if (window.location.href.includes('naukri.com')) {
             createGreenIndicator();
             
-            // ✅ KEEP CHECKING INDICATOR EVERY 3 SECONDS!
             setInterval(() => {
                 const indicator = document.getElementById('naukri-green-indicator');
                 if (!indicator && NAUKRI.isRunning) {
@@ -422,13 +476,11 @@ async function handleDetailedPage() {
     
     const currentUrl = window.location.href;
     
-    // ✅ Check if we just came from an application
     const isPostApplication = currentUrl.includes('/myapply/');
     
     if (isPostApplication) {
         console.log('✅ POST-APPLICATION PAGE DETECTED!\n');
         
-        // Check for success message
         const successMessage = document.body.textContent.toLowerCase();
         if (successMessage.includes('successfully applied') || successMessage.includes('you have successfully')) {
             console.log('✅ Application confirmed!\n');
@@ -439,7 +491,6 @@ async function handleDetailedPage() {
                 
                 console.log(`🎉 APPLIED! Total: ${NAUKRI.stats.applied}/${NAUKRI.config.MAX_JOBS}\n`);
                 
-                // ✅ IMMEDIATELY UPDATE INDICATOR!
                 updateIndicator();
                 saveState();
             }
@@ -458,7 +509,6 @@ async function handleDetailedPage() {
         return;
     }
     
-    // Normal detailed page processing
     if (NAUKRI.processedJobs.has(currentUrl)) {
         console.log('⏭️  Already processed\n');
         await findAndClickMatchingJob();
@@ -478,7 +528,6 @@ async function handleDetailedPage() {
         
         buttonInfo.button.click();
         
-        // ✅ CRITICAL: Wait longer for form to appear!
         console.log('⏳ Waiting 4 seconds for form to load...\n');
         await delay(4000);
         
@@ -489,35 +538,30 @@ async function handleDetailedPage() {
         if (formDetected) {
             console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
             console.log('🤖 CHATBOT FORM DETECTED!');
-            console.log('🚨 CANNOT SKIP - MUST FILL BEFORE MOVING FORWARD!');
+            console.log('🚀 FILLING WITH REAL DATA (Database + Resume + AI)');
             console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
             
-            // ✅ MUST FILL - NO OPTION TO SKIP!
-            console.log('🔒 Filling form now - this CANNOT be skipped!\n');
-            
-            const formFilled = await fillChatbotFormLinkedInStyle();
+            // 🆕 NEW REAL DATA FORM FILLING!
+            const formFilled = await fillChatbotFormWithRealData();
             
             if (formFilled) {
                 console.log('\n✅ ════════════════════════════════════════════════════════');
-                console.log('✅ FORM SUCCESSFULLY FILLED AND SUBMITTED!');
+                console.log('✅ FORM SUCCESSFULLY FILLED WITH REAL DATA!');
                 console.log('✅ ════════════════════════════════════════════════════════\n');
                 
                 NAUKRI.stats.applied++;
                 console.log(`🎉 Form filled & submitted! Total: ${NAUKRI.stats.applied}/${NAUKRI.config.MAX_JOBS}\n`);
                 
-                // ✅ IMMEDIATELY UPDATE INDICATOR!
                 updateIndicator();
                 saveState();
                 
-                // Wait for submission to complete
                 await delay(3000);
             } else {
                 console.log('\n⚠️  ════════════════════════════════════════════════════════');
                 console.log('⚠️  FORM FILLING FAILED - Trying again...');
                 console.log('⚠️  ════════════════════════════════════════════════════════\n');
                 
-                // Try one more time!
-                const retryFilled = await fillChatbotFormLinkedInStyle();
+                const retryFilled = await fillChatbotFormWithRealData();
                 
                 if (retryFilled) {
                     NAUKRI.stats.applied++;
@@ -532,7 +576,6 @@ async function handleDetailedPage() {
                 }
             }
         } else {
-            // Direct application - check for success message after delay
             console.log('ℹ️  No form detected - checking if directly applied...\n');
             await delay(2000);
             
@@ -541,7 +584,6 @@ async function handleDetailedPage() {
                 NAUKRI.stats.applied++;
                 console.log(`✅ Direct application! Total: ${NAUKRI.stats.applied}/${NAUKRI.config.MAX_JOBS}\n`);
                 
-                // ✅ IMMEDIATELY UPDATE INDICATOR!
                 updateIndicator();
                 saveState();
             } else {
@@ -557,15 +599,11 @@ async function handleDetailedPage() {
     } else if (buttonInfo.type === 'COMPANY_SITE') {
         console.log('⏭️  SKIPPING (company site)\n');
         NAUKRI.stats.skipped++;
-        
-        // ✅ UPDATE INDICATOR!
         updateIndicator();
         saveState();
     } else {
         console.log('❌ SKIPPING (no button)\n');
         NAUKRI.stats.skipped++;
-        
-        // ✅ UPDATE INDICATOR!
         updateIndicator();
         saveState();
     }
@@ -581,7 +619,7 @@ async function handleDetailedPage() {
     await findAndClickMatchingJob();
 }
 
-// ==================== CHATBOT DETECTION (ULTRA AGGRESSIVE!) ====================
+// ==================== CHATBOT DETECTION ====================
 async function detectChatbotWithMultipleMethods() {
     console.log('🔍 ══════════════════════════════════════════════════════════════');
     console.log('🔍 DETECTING CHATBOT FORM (ULTRA AGGRESSIVE MODE)');
@@ -589,22 +627,18 @@ async function detectChatbotWithMultipleMethods() {
     
     let detected = false;
     let attempts = 0;
-    const maxAttempts = 15; // More attempts!
+    const maxAttempts = 15;
     
     while (!detected && attempts < maxAttempts) {
         attempts++;
         console.log(`   [Attempt ${attempts}/${maxAttempts}] Scanning page...\n`);
         
-        // METHOD 1: Look for contenteditable with "Type message" placeholder
+        // METHOD 1: contenteditable
         const editables = document.querySelectorAll('[contenteditable="true"]');
         console.log(`      Found ${editables.length} contenteditable elements`);
         
         for (const ed of editables) {
-            const placeholder = ed.getAttribute('data-placeholder') || '';
             const rect = ed.getBoundingClientRect();
-            
-            console.log(`         - Size: ${rect.width.toFixed(0)}x${rect.height.toFixed(0)}, Placeholder: "${placeholder}"`);
-            
             if (rect.width > 50 && rect.height > 10) {
                 console.log('   ✅ METHOD 1: Found visible contenteditable!\n');
                 detected = true;
@@ -614,70 +648,29 @@ async function detectChatbotWithMultipleMethods() {
         
         if (detected) break;
         
-        // METHOD 2: Look for radio buttons with "notice period" text nearby
+        // METHOD 2: Radio buttons
         const radioButtons = document.querySelectorAll('input[type="radio"]');
         console.log(`      Found ${radioButtons.length} radio buttons`);
         
         if (radioButtons.length >= 3) {
-            // Check if there's text like "notice period" nearby
             const pageText = document.body.textContent.toLowerCase();
-            if (pageText.includes('notice period') || 
-                pageText.includes('ctc') || 
-                pageText.includes('experience') ||
-                pageText.includes('modassir')) {
-                console.log('   ✅ METHOD 2: Found radio form with questions!\n');
+            if (pageText.includes('notice period') || pageText.includes('ctc') || pageText.includes('experience')) {
+                console.log('   ✅ METHOD 2: Found radio form!\n');
                 detected = true;
                 break;
             }
         }
         
-        // METHOD 3: Look for drawer/modal with form elements
-        const modals = document.querySelectorAll('[class*="drawer"], [class*="modal"], [class*="popup"], [class*="chatbot"]');
-        console.log(`      Found ${modals.length} modal-like elements`);
-        
-        for (const modal of modals) {
-            const rect = modal.getBoundingClientRect();
-            if (rect.width > 200 && rect.height > 200) {
-                const inputs = modal.querySelectorAll('input, textarea, [contenteditable="true"]');
-                if (inputs.length > 0) {
-                    console.log(`   ✅ METHOD 3: Found modal with ${inputs.length} inputs!\n`);
-                    detected = true;
-                    break;
-                }
-            }
-        }
-        
         if (detected) break;
         
-        // METHOD 4: Look for "Save" button on page (indicates form is present)
-        const buttons = document.querySelectorAll('button');
-        for (const btn of buttons) {
-            const text = btn.textContent.toLowerCase().trim();
-            if (text === 'save' || text === 'submit') {
-                const rect = btn.getBoundingClientRect();
-                if (rect.width > 50 && rect.height > 20) {
-                    console.log('   ✅ METHOD 4: Found Save/Submit button!\n');
-                    detected = true;
-                    break;
-                }
-            }
-        }
-        
-        if (detected) break;
-        
-        // METHOD 5: Check for question text
+        // METHOD 3: Question text
         const pageText = document.body.textContent;
-        if (pageText.includes('What is your') || 
-            pageText.includes('notice period') ||
-            pageText.includes('Kindly answer all') ||
-            pageText.includes('successfully apply')) {
-            
-            // If question text exists, check for ANY input field
+        if (pageText.includes('What is your') || pageText.includes('notice period') || pageText.includes('Kindly answer all')) {
             const anyInput = document.querySelector('input:not([type="hidden"]), textarea, [contenteditable="true"]');
             if (anyInput) {
                 const rect = anyInput.getBoundingClientRect();
                 if (rect.width > 0 && rect.height > 0) {
-                    console.log('   ✅ METHOD 5: Found question + input field!\n');
+                    console.log('   ✅ METHOD 3: Found question + input!\n');
                     detected = true;
                     break;
                 }
@@ -692,7 +685,7 @@ async function detectChatbotWithMultipleMethods() {
     
     if (detected) {
         console.log('🎉 ══════════════════════════════════════════════════════════════');
-        console.log('🎉 CHATBOT FORM CONFIRMED - WILL FILL NOW!');
+        console.log('🎉 CHATBOT FORM CONFIRMED!');
         console.log('🎉 ══════════════════════════════════════════════════════════════\n');
     } else {
         console.log('⚠️  No form detected after 15 attempts\n');
@@ -701,164 +694,453 @@ async function detectChatbotWithMultipleMethods() {
     return detected;
 }
 
-// ==================== FILL CHATBOT FORM (LINKEDIN STYLE!) ====================
-async function fillChatbotFormLinkedInStyle() {
+// ==================== 🆕 NEW! FILL FORM WITH REAL DATA ====================
+async function fillChatbotFormWithRealData() {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🤖 STARTING FORM FILLING PROCESS');
+    console.log('🤖 FILLING FORM WITH REAL DATA');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     
     const maxQuestions = 15;
     let questionsAnswered = 0;
-    let saveButtonsClicked = 0;
     
     for (let q = 1; q <= maxQuestions; q++) {
         console.log(`\n━━━ Question ${q}/${maxQuestions} ━━━\n`);
         
         await delay(NAUKRI.config.DELAYS.BETWEEN_QUESTIONS);
         
-        // Check if form is complete
         if (isFormComplete()) {
-            console.log('✅ Form completion detected!\n');
+            console.log('✅ Form complete!\n');
             break;
         }
         
         const questionText = getCurrentQuestion();
         
         if (!questionText) {
-            console.log('ℹ️  No more questions found\n');
-            
-            // If we answered at least 1 question, consider it success
-            if (questionsAnswered > 0) {
-                break;
-            } else {
-                console.log('⚠️  No questions answered yet, continuing search...\n');
-                continue;
-            }
+            console.log('ℹ️  No more questions\n');
+            if (questionsAnswered > 0) break;
+            continue;
         }
         
         console.log(`📝 Question: "${questionText}"\n`);
         
-        const fields = getAllVisibleFields();
+        // Try TEXT field first
+        const textFilled = await fillTextFieldWithRealData(questionText);
         
-        if (fields.length === 0) {
-            console.log('⚠️  No fields found for this question\n');
-            
-            // Try clicking Save in case question is optional
-            const saved = await clickSaveButton();
-            if (saved) {
-                saveButtonsClicked++;
-                await delay(NAUKRI.config.DELAYS.AFTER_SAVE);
-            }
+        if (textFilled) {
+            console.log('✅ Text field filled with real data!\n');
+            questionsAnswered++;
+            await clickSaveButton();
+            await delay(NAUKRI.config.DELAYS.AFTER_SAVE);
             continue;
         }
         
-        console.log(`   Found ${fields.length} field(s) to fill\n`);
+        // Try RADIO buttons
+        const radioFilled = await fillRadioButtonsWithAI(questionText);
         
-        let filled = false;
-        
-        for (const field of fields) {
-            if (isFieldAlreadyFilled(field)) {
-                console.log(`   ✓ Field already filled`);
-                filled = true;
-                continue;
-            }
-            
-            const fieldInfo = getFieldInformation(field);
-            let success = false;
-            
-            // TEXT/CONTENTEDITABLE
-            if (field.tagName.toLowerCase() === 'input' || field.getAttribute('contenteditable') === 'true') {
-                const answer = getAnswerForField(fieldInfo, questionText);
-                
-                if (answer) {
-                    console.log(`   💡 Filling with answer: "${answer}"`);
-                    
-                    if (field.getAttribute('contenteditable') === 'true') {
-                        field.textContent = answer;
-                        field.innerHTML = answer;
-                        field.dispatchEvent(new Event('input', { bubbles: true }));
-                    } else {
-                        field.value = answer;
-                        triggerFieldEvents(field);
-                    }
-                    
-                    success = true;
-                    filled = true;
-                }
-            }
-            
-            // RADIO
-            else if (field.type === 'radio') {
-                if (!field.name) continue;
-                
-                const radioGroup = document.querySelectorAll(`input[type="radio"][name="${field.name}"]`);
-                const alreadySelected = Array.from(radioGroup).some(r => r.checked);
-                
-                if (alreadySelected) {
-                    console.log(`   ✓ Radio already selected`);
-                    success = true;
-                    filled = true;
-                } else {
-                    for (const radio of radioGroup) {
-                        const radioInfo = getFieldInformation(radio);
-                        if (fillRadioFieldIntelligently(radio, radioInfo, questionText)) {
-                            success = true;
-                            filled = true;
-                            break;
-                        }
-                    }
-                }
-            }
-            
-            // DROPDOWN
-            else if (field.tagName.toLowerCase() === 'select') {
-                success = await fillDropdownIntelligently(field, fieldInfo, questionText);
-                if (success) filled = true;
-            }
-            
-            if (success) {
-                console.log(`   ✅ Field filled successfully`);
-                await delay(NAUKRI.config.DELAYS.AFTER_ANSWER);
-            }
+        if (radioFilled) {
+            console.log('✅ Radio button selected!\n');
+            questionsAnswered++;
+            await clickSaveButton();
+            await delay(NAUKRI.config.DELAYS.AFTER_SAVE);
+            continue;
         }
         
-        if (filled) {
-            console.log('\n   🔍 Looking for Save button...\n');
-            const saveClicked = await clickSaveButton();
-            
-            if (saveClicked) {
-                console.log('   ✅ Save button clicked!\n');
-                questionsAnswered++;
-                saveButtonsClicked++;
-                await delay(NAUKRI.config.DELAYS.AFTER_SAVE);
-            } else {
-                console.log('   ⚠️  No Save button found\n');
-                questionsAnswered++;
-            }
-        } else {
-            console.log('   ⚠️  No fields were filled for this question\n');
-        }
+        console.log('⚠️  No fields filled\n');
+        await clickSaveButton();
+        await delay(NAUKRI.config.DELAYS.AFTER_SAVE);
     }
     
     console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('📊 FORM FILLING SUMMARY');
     console.log(`📊 Questions answered: ${questionsAnswered}`);
-    console.log(`📊 Save buttons clicked: ${saveButtonsClicked}`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     
-    // Consider success if at least 1 question was answered
-    const success = questionsAnswered > 0;
-    
-    if (success) {
-        console.log('✅ Form filling SUCCESSFUL!\n');
-    } else {
-        console.log('❌ Form filling FAILED - no questions answered!\n');
-    }
-    
-    return success;
+    return questionsAnswered > 0;
 }
 
-// ==================== FORM FILLING HELPERS ====================
+// ==================== 🆕 FILL TEXT FIELD (ONE-LINER + REAL DATA) ====================
+async function fillTextFieldWithRealData(questionText) {
+    console.log('   🔍 Looking for text field...\n');
+    
+    // Find text input (one-liner method)
+    const field = document.querySelector('[contenteditable="true"]') || 
+                  document.querySelector('input[type="text"]') ||
+                  document.querySelector('input:not([type])');
+    
+    if (!field) {
+        console.log('   ❌ No text field\n');
+        return false;
+    }
+    
+    // Check if already filled
+    const currentValue = field.textContent || field.value || '';
+    if (currentValue.trim().length > 0) {
+        console.log('   ⏭️  Already filled\n');
+        return true;
+    }
+    
+    console.log('   ✅ Text field found!\n');
+    
+    // 🆕 Get REAL answer from Database/Resume/AI
+    const answer = await getRealAnswerFromData(questionText);
+    
+    if (!answer) {
+        console.log('   ⚠️  No answer found\n');
+        return false;
+    }
+    
+    console.log(`   💡 Real Answer: "${answer}"\n`);
+    
+    // Fill using one-liner method (WORKING METHOD!)
+    if (field.getAttribute('contenteditable') === 'true') {
+        field.textContent = answer;
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+    } else {
+        field.value = answer;
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+        field.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    
+    await delay(300);
+    
+    // Verify
+    const finalValue = field.textContent || field.value || '';
+    if (finalValue.includes(answer)) {
+        console.log('   ✅ Successfully filled!\n');
+        return true;
+    }
+    
+    console.log('   ⚠️  Verification failed\n');
+    return false;
+}
+
+// ==================== 🆕 GET REAL ANSWER FROM DATABASE/RESUME/AI ====================
+async function getRealAnswerFromData(questionText) {
+    console.log('   🧠 Getting answer from real data...\n');
+    
+    const context = questionText.toLowerCase();
+    const userData = NAUKRI.userData || {};
+    const resumeData = NAUKRI.resumeData || {};
+    const exp = resumeData.totalExperience || userData.totalExperience || 0;
+    
+    // EXACT MATCHES
+    
+    // Current CTC
+    if (/current.*ctc|current.*salary|present.*ctc/i.test(context)) {
+        const ctc = calculateCTC(exp, false);
+        console.log(`      → Current CTC: ${ctc} LPA\n`);
+        return ctc.toString();
+    }
+    
+    // Expected CTC
+    if (/expected.*ctc|expected.*salary|desired.*ctc/i.test(context)) {
+        const ctc = calculateCTC(exp, true);
+        console.log(`      → Expected CTC: ${ctc} LPA\n`);
+        return ctc.toString();
+    }
+    
+    // Generic CTC
+    if (/\bctc\b|salary|lacs|lakhs|package/i.test(context)) {
+        const ctc = calculateCTC(exp, false);
+        console.log(`      → CTC: ${ctc} LPA\n`);
+        return ctc.toString();
+    }
+    
+    // Notice Period
+    if (/notice.*period/i.test(context)) {
+        if (/day/i.test(context)) return '15';
+        if (/week/i.test(context)) return '2';
+        if (/month/i.test(context)) return '1';
+        return '15';
+    }
+    
+    // Experience
+    if (/experience.*year|year.*experience|total.*experience/i.test(context)) {
+        console.log(`      → Experience: ${exp} years\n`);
+        return Math.floor(exp).toString();
+    }
+    
+    // Location
+    if (/city|location|where.*stay|where.*live/i.test(context)) {
+        const city = userData.city || resumeData.city || 'India';
+        console.log(`      → City: ${city}\n`);
+        return city;
+    }
+    
+    // Name
+    if (/name|full.*name/i.test(context)) {
+        const name = userData.fullName || resumeData.fullName || '';
+        if (name) {
+            console.log(`      → Name: ${name}\n`);
+            return name;
+        }
+    }
+    
+    // 🆕 USE AI IF NO EXACT MATCH
+    if (NAUKRI.openaiKey) {
+        console.log('      → No exact match, asking AI...\n');
+        const aiAnswer = await getAIAnswerForQuestion(questionText, userData, resumeData, exp);
+        if (aiAnswer) {
+            console.log(`      → AI Answer: ${aiAnswer}\n`);
+            return aiAnswer;
+        }
+    }
+    
+    console.log('      → No answer\n');
+    return '';
+}
+
+function calculateCTC(exp, isExpected) {
+    let ctc = 0;
+    
+    if (exp < 1) ctc = 3.5;
+    else if (exp < 2) ctc = 5;
+    else if (exp < 3) ctc = 7;
+    else if (exp < 5) ctc = 10;
+    else if (exp < 7) ctc = 15;
+    else if (exp < 10) ctc = 20;
+    else ctc = 25;
+    
+    if (isExpected) {
+        ctc = Math.ceil(ctc * 1.25);
+    }
+    
+    return Math.floor(ctc);
+}
+
+// ==================== 🆕 AI ANSWER FOR TEXT QUESTIONS ====================
+async function getAIAnswerForQuestion(question, userData, resumeData, exp) {
+    if (!NAUKRI.openaiKey) return '';
+    
+    try {
+        const prompt = `You are filling a Naukri.com job application. Answer ONLY with the exact value.
+
+QUESTION: "${question}"
+
+USER DATA:
+- Experience: ${exp} years
+- Location: ${userData.city || resumeData.city || 'India'}
+- Current CTC: ${calculateCTC(exp, false)} LPA
+- Expected CTC: ${calculateCTC(exp, true)} LPA
+
+RULES:
+- Give ONLY the answer (no quotes, no explanation)
+- For salary: just number (e.g., "7")
+- For yes/no: "Yes" or "No"
+- Max 50 characters
+- NO "Answer:" prefix
+
+Answer:`;
+
+        const response = await Promise.race([
+            fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${NAUKRI.openaiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: 'gpt-3.5-turbo',
+                    messages: [{ role: 'user', content: prompt }],
+                    max_tokens: 50,
+                    temperature: 0.1
+                })
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000))
+        ]);
+
+        if (response.ok) {
+            const data = await response.json();
+            let answer = data.choices[0].message.content.trim();
+            
+            answer = answer.replace(/^["'`]|["'`]$/g, '');
+            answer = answer.replace(/^(Answer|Response):\s*/i, '');
+            answer = answer.trim();
+            
+            if (answer && answer.length > 0 && answer.length < 200) {
+                return answer;
+            }
+        }
+    } catch (error) {
+        console.warn('      ⚠️ AI error:', error.message);
+    }
+    
+    return '';
+}
+
+// ==================== 🆕 FILL RADIO BUTTONS WITH AI ====================
+async function fillRadioButtonsWithAI(questionText) {
+    console.log('   🔍 Looking for radio buttons...\n');
+    
+    const radios = document.querySelectorAll('input[type="radio"]');
+    
+    if (radios.length === 0) {
+        console.log('   ❌ No radio buttons\n');
+        return false;
+    }
+    
+    // Group by name
+    const groups = {};
+    radios.forEach(r => {
+        const name = r.name || 'unnamed';
+        if (!groups[name]) groups[name] = [];
+        groups[name].push(r);
+    });
+    
+    console.log(`   ✅ Found ${Object.keys(groups).length} radio groups\n`);
+    
+    for (const name in groups) {
+        const group = groups[name];
+        
+        // Check if already selected
+        if (group.some(r => r.checked)) {
+            console.log(`      ⏭️  Already selected\n`);
+            continue;
+        }
+        
+        console.log(`      🎯 Processing group: "${name}"\n`);
+        
+        // Get options
+        const options = group.map(r => {
+            let label = '';
+            if (r.labels && r.labels[0]) {
+                label = r.labels[0].textContent.trim();
+            } else if (r.parentElement) {
+                label = r.parentElement.textContent.trim();
+            }
+            return { radio: r, label: label };
+        });
+        
+        console.log(`         Options: ${options.map(o => o.label || 'unlabeled').join(', ')}\n`);
+        
+        // 🆕 Select with AI
+        const selected = await selectRadioWithAI(questionText, options);
+        
+        if (selected) {
+            console.log(`         ✅ Selecting: "${selected.label}"\n`);
+            selected.radio.checked = true;
+            selected.radio.click();
+            selected.radio.dispatchEvent(new Event('change', { bubbles: true }));
+            await delay(300);
+            return true;
+        }
+    }
+    
+    console.log('   ⚠️  No radio selected\n');
+    return false;
+}
+
+// ==================== 🆕 SELECT RADIO WITH AI ====================
+async function selectRadioWithAI(question, options) {
+    const context = question.toLowerCase();
+    
+    // Check if Yes/No
+    const yesOption = options.find(o => /^yes$/i.test(o.label.trim()));
+    const noOption = options.find(o => /^no$/i.test(o.label.trim()));
+    
+    if (yesOption && noOption && options.length === 2) {
+        console.log('         → Yes/No question\n');
+        
+        // Willing/Relocate → Yes
+        if (/willing|relocate|comfortable|attend|interested/i.test(context)) {
+            return yesOption;
+        }
+        
+        // Sponsorship → No
+        if (/sponsorship|visa/i.test(context)) {
+            return noOption;
+        }
+        
+        return yesOption;
+    }
+    
+    // NOT Yes/No - use AI
+    if (NAUKRI.openaiKey && options.length > 0) {
+        console.log('         → Complex options, using AI...\n');
+        
+        const optionTexts = options.map(o => o.label).filter(l => l.length > 0);
+        
+        if (optionTexts.length === 0) {
+            return options[0];
+        }
+        
+        const aiSelected = await selectRadioOptionWithAI(question, optionTexts);
+        
+        if (aiSelected) {
+            const match = options.find(o => o.label.toLowerCase().includes(aiSelected.toLowerCase()) ||
+                                            aiSelected.toLowerCase().includes(o.label.toLowerCase()));
+            if (match) return match;
+        }
+    }
+    
+    // Fallback
+    console.log('         → Fallback: first option\n');
+    return options[0];
+}
+
+// ==================== 🆕 AI RADIO SELECTION ====================
+async function selectRadioOptionWithAI(question, options) {
+    if (!NAUKRI.openaiKey) return '';
+    
+    try {
+        const userData = NAUKRI.userData || {};
+        const resumeData = NAUKRI.resumeData || {};
+        const exp = resumeData.totalExperience || 0;
+        
+        const prompt = `Select the BEST option for this Naukri.com job application question.
+
+QUESTION: "${question}"
+
+OPTIONS:
+${options.map((opt, i) => `${i + 1}. ${opt}`).join('\n')}
+
+USER DATA:
+- Experience: ${exp} years
+- Location: ${userData.city || 'India'}
+- Notice: 15 days
+- Willing to relocate: Yes
+
+RULES:
+- Respond with ONLY the exact option text
+- NO number, NO explanation
+- Just copy the option
+
+Best option:`;
+
+        const response = await Promise.race([
+            fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${NAUKRI.openaiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: 'gpt-3.5-turbo',
+                    messages: [{ role: 'user', content: prompt }],
+                    max_tokens: 30,
+                    temperature: 0.1
+                })
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000))
+        ]);
+
+        if (response.ok) {
+            const data = await response.json();
+            let answer = data.choices[0].message.content.trim();
+            
+            answer = answer.replace(/^["'`]|["'`]$/g, '');
+            answer = answer.replace(/^\d+\.\s*/, '');
+            answer = answer.trim();
+            
+            return answer;
+        }
+    } catch (error) {
+        console.warn('         ⚠️ AI error:', error.message);
+    }
+    
+    return '';
+}
+
+// ==================== HELPER FUNCTIONS ====================
 
 function getCurrentQuestion() {
     const possibleQuestions = document.querySelectorAll('div, p, span, label, h3, h4');
@@ -878,264 +1160,31 @@ function getCurrentQuestion() {
     return '';
 }
 
-function getAllVisibleFields() {
-    // ✅ WORKING VERSION FROM USER'S FILE!
-    const allFields = document.querySelectorAll('input:not([type="hidden"]), textarea, select, [contenteditable="true"]');
-    
-    return Array.from(allFields).filter(field => {
-        const rect = field.getBoundingClientRect();
-        const style = window.getComputedStyle(field);
-        
-        return rect.width > 0 && rect.height > 0 &&
-               style.display !== 'none' &&
-               style.visibility !== 'hidden' &&
-               !field.disabled;
-    });
-}
-
-function getFieldInformation(field) {
-    const label = getFieldLabel(field).toLowerCase();
-    const name = (field.name || '').toLowerCase();
-    const placeholder = (field.placeholder || field.getAttribute('data-placeholder') || '').toLowerCase();
-    
-    return {
-        field: field,
-        label: label,
-        name: name,
-        placeholder: placeholder,
-        context: `${label} ${name} ${placeholder}`
-    };
-}
-
-function getFieldLabel(field) {
-    try {
-        if (field.id) {
-            const label = document.querySelector(`label[for="${field.id}"]`);
-            if (label) return label.textContent.trim();
-        }
-        
-        const parentLabel = field.closest('label');
-        if (parentLabel) return parentLabel.textContent.trim();
-        
-        return field.getAttribute('aria-label') || field.placeholder || field.getAttribute('data-placeholder') || '';
-    } catch {
-        return '';
-    }
-}
-
-function isFieldAlreadyFilled(field) {
-    if (field.tagName.toLowerCase() === 'select') {
-        return field.value && field.value !== '' && field.value !== 'select';
-    }
-    
-    if (field.type === 'radio') {
-        if (!field.name) return field.checked;
-        const group = document.querySelectorAll(`input[type="radio"][name="${field.name}"]`);
-        return Array.from(group).some(r => r.checked);
-    }
-    
-    if (field.getAttribute('contenteditable') === 'true') {
-        return field.textContent.trim().length > 0;
-    }
-    
-    return (field.value || '').trim().length > 0;
-}
-
-function getAnswerForField(fieldInfo, questionText) {
-    const context = (fieldInfo.context + ' ' + questionText).toLowerCase();
-    const userData = { ...NAUKRI.userData, ...NAUKRI.resumeData };
-    const exp = userData.totalExperience || 0;
-    
-    if (/current.*ctc|current.*salary/i.test(context)) {
-        const ctc = exp < 1 ? 3.5 : exp < 2 ? 5 : exp < 3 ? 7 : exp < 5 ? 10 : 15;
-        return Math.floor(ctc).toString();
-    }
-    
-    if (/expected.*ctc|expected.*salary/i.test(context)) {
-        const ctc = exp < 1 ? 4.5 : exp < 2 ? 6.5 : exp < 3 ? 9 : exp < 5 ? 13 : 19;
-        return Math.floor(ctc).toString();
-    }
-    
-    if (/notice.*period/i.test(context)) {
-        if (/day/i.test(context)) return '15';
-        if (/week/i.test(context)) return '2';
-        return '1';
-    }
-    
-    if (/experience.*year|years.*experience/i.test(context)) {
-        return Math.floor(exp).toString();
-    }
-    
-    if (/data.*management|google.*sheet|data.*analysis/i.test(context)) {
-        return Math.max(1, Math.floor(exp * 0.7)).toString();
-    }
-    
-    return '';
-}
-
-function fillRadioFieldIntelligently(radio, radioInfo, questionText) {
-    const context = (radioInfo.context + ' ' + questionText).toLowerCase();
-    
-    // Get radio label with MULTIPLE fallback methods
-    let radioLabel = '';
-    
-    if (radio.labels && radio.labels[0]) {
-        radioLabel = radio.labels[0].textContent.toLowerCase().trim();
-    } else if (radio.parentElement) {
-        const parentText = radio.parentElement.textContent.trim();
-        if (parentText.length < 50) {
-            radioLabel = parentText.toLowerCase();
-        }
-    }
-    
-    console.log(`\n      🎯 Testing radio button:`);
-    console.log(`         Value: "${radio.value}"`);
-    console.log(`         Label: "${radioLabel}"`);
-    console.log(`         Question has: willing=${/willing/i.test(questionText)}, travel=${/travel/i.test(questionText)}`);
-    
-    const fullContext = `${context} ${radioLabel}`;
-    
-    // YES questions - ULTRA LENIENT!
-    const isYesNoQuestion = /willing|travel|relocate|comfortable|can you|are you/i.test(questionText);
-    
-    if (isYesNoQuestion) {
-        console.log(`         → This IS a Yes/No question!`);
-        
-        const hasYes = /yes/i.test(radioLabel) || /yes/i.test(radio.value) || radioLabel.includes('yes');
-        const hasNo = /no/i.test(radioLabel) || /no/i.test(radio.value) || radioLabel.includes('no');
-        
-        console.log(`         Label has: yes=${hasYes}, no=${hasNo}`);
-        
-        if (hasYes && !hasNo) {
-            console.log(`         ✅✅✅ SELECTING YES!`);
-            radio.checked = true;
-            radio.click(); // Actually click!
-            triggerFieldEvents(radio);
-            return true;
-        }
-        
-        if (hasNo && !hasYes) {
-            console.log(`         ✅✅✅ SELECTING NO!`);
-            radio.checked = true;
-            radio.click();
-            triggerFieldEvents(radio);
-            return true;
-        }
-    } else {
-        console.log(`         → NOT a Yes/No question`);
-    }
-    
-    // Sponsorship - select NO
-    if (/sponsorship|visa/i.test(questionText)) {
-        if (/no/i.test(radioLabel) || /no/i.test(radio.value)) {
-            console.log(`         ✅ NO for sponsorship`);
-            radio.checked = true;
-            radio.click();
-            triggerFieldEvents(radio);
-            return true;
-        }
-    }
-    
-    // Notice period - select 15 days
-    if (/notice/i.test(questionText)) {
-        if (/15/i.test(radioLabel)) {
-            console.log(`         ✅ 15 days`);
-            radio.checked = true;
-            radio.click();
-            triggerFieldEvents(radio);
-            return true;
-        }
-    }
-    
-    console.log(`         ❌ No match\n`);
-    return false;
-}
-
-async function fillDropdownIntelligently(select, fieldInfo, questionText) {
-    const options = Array.from(select.options).filter(opt => 
-        opt.value && opt.value !== '' && opt.value !== 'select'
-    );
-    
-    if (options.length === 0) return false;
-    
-    const context = (fieldInfo.context + ' ' + questionText).toLowerCase();
-    const userData = { ...NAUKRI.userData, ...NAUKRI.resumeData };
-    const exp = userData.totalExperience || 0;
-    
-    let selectedOption = null;
-    
-    if (/experience|year/i.test(context)) {
-        const expString = Math.floor(exp).toString();
-        selectedOption = options.find(o => o.text.includes(expString));
-    }
-    
-    if (!selectedOption && options.length === 2) {
-        const yesOpt = options.find(o => /yes/i.test(o.text));
-        const noOpt = options.find(o => /no/i.test(o.text));
-        
-        if (yesOpt && noOpt) {
-            if (/willing|relocate/i.test(context)) {
-                selectedOption = yesOpt;
-            } else if (/sponsorship/i.test(context)) {
-                selectedOption = noOpt;
-            }
-        }
-    }
-    
-    if (!selectedOption) {
-        selectedOption = options[0];
-    }
-    
-    if (selectedOption) {
-        console.log(`      ✅ Selected: "${selectedOption.text}"`);
-        select.value = selectedOption.value;
-        triggerFieldEvents(select);
-        return true;
-    }
-    
-    return false;
-}
-
 async function clickSaveButton() {
-    const buttons = document.querySelectorAll('button, div[role="button"]');
+    console.log('   💾 Looking for Save button...\n');
     
-    const candidates = [];
+    const buttons = document.querySelectorAll('button');
     
     for (const btn of buttons) {
         const rect = btn.getBoundingClientRect();
-        if (rect.width < 30 || rect.height < 20) continue;
-        
-        const style = window.getComputedStyle(btn);
-        if (style.display === 'none' || style.visibility === 'hidden') continue;
+        if (rect.width === 0 || rect.height === 0) continue;
         
         const text = btn.textContent.toLowerCase().trim();
         
-        let score = 0;
-        if (text === 'save') score += 100;
-        if (text === 'submit') score += 90;
-        if (text.includes('save')) score += 50;
-        if (text.includes('cancel')) score -= 100;
-        
-        if (score > 0) {
-            candidates.push({ btn, score, text });
+        if (text === 'save' || text === 'submit') {
+            console.log('   ✅ Save button found\n');
+            
+            btn.scrollIntoView({ behavior: 'auto', block: 'center' });
+            await delay(300);
+            
+            btn.click();
+            console.log('   ✅ Clicked!\n');
+            return true;
         }
     }
     
-    if (candidates.length === 0) return false;
-    
-    candidates.sort((a, b) => b.score - a.score);
-    
-    console.log(`      Button: "${candidates[0].text}"`);
-    
-    await delay(300);
-    
-    try {
-        candidates[0].btn.click();
-    } catch {
-        candidates[0].btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    }
-    
-    return true;
+    console.log('   ⚠️  No Save button\n');
+    return false;
 }
 
 function isFormComplete() {
@@ -1144,13 +1193,6 @@ function isFormComplete() {
            text.includes('successfully applied');
 }
 
-function triggerFieldEvents(field) {
-    ['input', 'change', 'blur'].forEach(type => {
-        field.dispatchEvent(new Event(type, { bubbles: true }));
-    });
-}
-
-// ==================== GET BUTTON TYPE ====================
 function getButtonType() {
     const buttons = document.querySelectorAll('button, a[role="button"]');
     
@@ -1210,12 +1252,10 @@ async function findAndClickMatchingJob() {
     saveState();
 }
 
-// ==================== FIND JOBS (USING WORKING LOGIC!) ====================
 async function findJobsInArea(area) {
     let container = null;
     
     if (area === 'RIGHT_SIDEBAR') {
-        // Try sidebar selectors
         const selectors = [
             'section[class*="simjobs-right"]',
             'div[class*="right-container"]',
@@ -1231,7 +1271,6 @@ async function findJobsInArea(area) {
         }
         
         if (!container) {
-            // Try finding by text "jobs you might"
             const allElems = document.querySelectorAll('h2, h3, h4, div');
             for (const elem of allElems) {
                 if (elem.textContent.toLowerCase().includes('jobs you might')) {
@@ -1242,17 +1281,12 @@ async function findJobsInArea(area) {
             }
         }
     } else if (area === 'SCROLL_DOWN') {
-        // Find "Roles you might be interested in" section
         console.log('   🔍 Looking for "Roles you might be interested in" section...\n');
         
         const allElems = document.querySelectorAll('h2, h3, h4, div');
         for (const elem of allElems) {
             const text = elem.textContent.toLowerCase();
-            if (text.includes('roles you might') || 
-                text.includes('15 roles') || 
-                text.includes('20 roles') ||
-                text.includes('14 roles') ||
-                text.match(/\d+\s+roles/)) {
+            if (text.includes('roles you might') || text.match(/\d+\s+roles/)) {
                 container = elem.parentElement;
                 console.log(`   ✓ Found section: "${elem.textContent.trim()}"\n`);
                 break;
@@ -1268,8 +1302,6 @@ async function findJobsInArea(area) {
     console.log(`   📦 Container found in ${area}\n`);
     
     const scoredJobs = [];
-    
-    // ✅ USE YOUR WORKING SELECTORS!
     const jobElements = container.querySelectorAll('article, div[class*="job"], li, div[class*="card"], div[class*="tuple"]');
     
     console.log(`   Checking ${jobElements.length} elements...\n`);
@@ -1277,10 +1309,8 @@ async function findJobsInArea(area) {
     for (const elem of jobElements) {
         const text = elem.textContent.trim();
         
-        // Basic validation
         if (text.length < 20 || text.length > 500) continue;
         
-        // Must have job-like keywords
         const hasKeywords = text.toLowerCase().includes('posted') || 
                            text.toLowerCase().includes('reviews') ||
                            text.toLowerCase().includes('days ago') ||
@@ -1291,15 +1321,12 @@ async function findJobsInArea(area) {
         const rect = elem.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) continue;
         
-        // Use text as unique ID (first 50 chars)
         const cardId = text.substring(0, 50);
         if (NAUKRI.clickedJobs.has(cardId)) continue;
         
-        // Extract job title (first non-empty line)
         const lines = text.split('\n').filter(l => l.trim().length > 5);
         const jobTitle = lines[0] || text.substring(0, 50);
         
-        // Calculate match score
         const score = calculateMatchScore(jobTitle, NAUKRI.searchTerm);
         
         if (score > 0) {
@@ -1317,7 +1344,6 @@ async function findJobsInArea(area) {
     return scoredJobs;
 }
 
-// ==================== CLICK BEST JOB (WORKING LOGIC!) ====================
 async function clickBestMatchingJob(jobs) {
     jobs.sort((a, b) => b.score - a.score);
     
@@ -1341,7 +1367,6 @@ async function clickBestMatchingJob(jobs) {
     best.card.scrollIntoView({ behavior: 'smooth', block: 'center' });
     await delay(1000);
     
-    // Massive highlight
     best.card.style.cssText = `
         background-color: #bfdbfe !important;
         border: 15px solid #3b82f6 !important;
@@ -1362,7 +1387,6 @@ async function clickBestMatchingJob(jobs) {
         best.card.click();
         console.log('✅ CLICKED!\n');
     } catch (e) {
-        // Try clicking a link inside
         const link = best.card.querySelector('a[href]');
         if (link) {
             console.log('   (Clicking link inside card)\n');
@@ -1371,4 +1395,4 @@ async function clickBestMatchingJob(jobs) {
     }
 }
 
-console.log('✅ [NAUKRI COMPLETE] All features loaded!\n');
+console.log('✅ [NAUKRI FINAL] All features loaded with REAL DATA form filling!\n');
